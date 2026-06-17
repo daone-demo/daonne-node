@@ -47,9 +47,9 @@ https://你的域名.vercel.app/api/v1
 
 Node.js 版本使用轻量 `.env` 文件区分环境，作用类似 Java 的 `application-local.yml`、`application-test.yml`、`application-prod.yml`。
 
-- `config/application.local.env`: 本地环境。默认使用内存数据和 Mock MySQL、Redis、OSS、短信、模型、内容安全、支付。
-- `config/application.test.env.example`: 测试环境模板。用于 Vercel Preview/Test，填写真实 MySQL、Redis、OSS、支付等配置。
-- `config/application.prod.env.example`: 生产环境模板。用于 Vercel Production，填写真实 MySQL、Redis、OSS、支付等配置。
+- `config/application.local.env`: 本地环境。默认使用内存数据和 Mock Redis、OSS、短信、模型、内容安全、支付。
+- `config/application.test.env.example`: 测试环境模板。用于 Vercel Preview/Test，默认使用 Postgres/Neon，填写真实 Redis、OSS、支付等配置。
+- `config/application.prod.env.example`: 生产环境模板。用于 Vercel Production，默认使用 Postgres/Neon，填写真实 Redis、OSS、支付等配置。
 - `.env.vercel.example`: Vercel 控制台环境变量总模板。
 
 环境识别规则：
@@ -104,7 +104,7 @@ Vercel Serverless 函数不是长驻应用。local Profile 固定使用内存仓
 `test`/`prod` Profile 会启用真实中间件适配：
 
 - Redis 存储短信验证码和登录 token。
-- MySQL 或 Vercel Postgres `daone_runtime_store` 保存 Node 运行态快照，使用 `DAONE_DB_TYPE=mysql|postgres` 选择。
+- Postgres/Neon `daone_runtime_store` 保存 Node 运行态快照；仍保留 MySQL 兼容分支，可通过 `DAONE_DB_TYPE=mysql|postgres` 选择。
 - OSS PUT 预签名上传。
 - 阿里云短信发送验证码。
 - 内容安全、模型服务通过 HTTP Provider 调用。

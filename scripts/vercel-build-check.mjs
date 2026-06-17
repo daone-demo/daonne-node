@@ -1,5 +1,8 @@
 import { existsSync, readFileSync } from "node:fs";
 
+const { configHealth } = await import("../src/infrastructure/config/env.js");
+const health = configHealth();
+
 const required = [
   "api/index.js",
   "api/v3/swagger.js",
@@ -51,7 +54,7 @@ if (!catchAllRewrite) {
   throw new Error("vercel.json must rewrite /api/:path* to api/index.js with __daone_path so nested API routes reach the handler");
 }
 
-console.log("Vercel build check passed.");
+console.log(`Vercel build check passed. profile=${health.profile}, dataSourceType=${health.dataSourceType}`);
 
 function readJson(filePath) {
   return JSON.parse(readFileSync(filePath, "utf8"));

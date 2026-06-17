@@ -23,7 +23,7 @@ export const appConfig = {
     adminPhones: listEnv("DAONE_ADMIN_PHONES", [])
   },
   dataSource: {
-    type: env("DAONE_DB_TYPE", isLocal() ? "memory" : "mysql"),
+    type: env("DAONE_DB_TYPE", isLocal() ? "memory" : "postgres"),
     mysql: {
       host: env("MYSQL_HOST", ""),
       port: numberEnv("MYSQL_PORT", 3306),
