@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+process.env.DAONE_PROFILE = "local";
 process.env.DAONE_ADMIN_PHONES = "13800138000";
 const { handleRequest } = await import("../src/starter/app.js");
 const { default: vercelIndexHandler } = await import("../api/index.js");

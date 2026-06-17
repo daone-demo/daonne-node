@@ -32,12 +32,12 @@ export const appConfig = {
       password: env("MYSQL_PASSWORD", "")
     },
     postgres: {
-      url: env("POSTGRES_URL", ""),
-      host: env("POSTGRES_HOST", ""),
-      port: numberEnv("POSTGRES_PORT", 5432),
-      database: env("POSTGRES_DATABASE", ""),
-      username: env("POSTGRES_USER", ""),
-      password: env("POSTGRES_PASSWORD", ""),
+      url: env("POSTGRES_URL", env("DATABASE_URL", "")),
+      host: env("POSTGRES_HOST", env("PGHOST", "")),
+      port: numberEnv("POSTGRES_PORT", numberEnv("PGPORT", 5432)),
+      database: env("POSTGRES_DATABASE", env("PGDATABASE", "")),
+      username: env("POSTGRES_USER", env("PGUSER", "")),
+      password: env("POSTGRES_PASSWORD", env("PGPASSWORD", "")),
       ssl: boolEnv("POSTGRES_SSL", !isLocal())
     },
     redis: {
@@ -148,13 +148,11 @@ function missingRequiredConfig() {
     ]);
   }
   if (appConfig.dataSource.type === "postgres") {
-    requireOneOf(missing, ["POSTGRES_URL", "POSTGRES_HOST"]);
-    if (!process.env.POSTGRES_URL) {
-      requireKeys(missing, [
-        "POSTGRES_DATABASE",
-        "POSTGRES_USER",
-        "POSTGRES_PASSWORD"
-      ]);
+    requireOneOf(missing, ["POSTGRES_URL", "DATABASE_URL", "POSTGRES_HOST", "PGHOST"]);
+    if (!process.env.POSTGRES_URL && !process.env.DATABASE_URL) {
+      requireOneOf(missing, ["POSTGRES_DATABASE", "PGDATABASE"]);
+      requireOneOf(missing, ["POSTGRES_USER", "PGUSER"]);
+      requireOneOf(missing, ["POSTGRES_PASSWORD", "PGPASSWORD"]);
     }
   }
 
