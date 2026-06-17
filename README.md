@@ -104,15 +104,22 @@ Vercel Serverless 函数不是长驻应用。local Profile 固定使用内存仓
 `test`/`prod` Profile 会启用真实中间件适配：
 
 - Redis 存储短信验证码和登录 token。
-- MySQL `daone_runtime_store` 保存 Node 运行态快照。
+- MySQL 或 Vercel Postgres `daone_runtime_store` 保存 Node 运行态快照，使用 `DAONE_DB_TYPE=mysql|postgres` 选择。
 - OSS PUT 预签名上传。
 - 阿里云短信发送验证码。
 - 内容安全、模型服务通过 HTTP Provider 调用。
 - 微信 Native 支付和支付宝 Page Pay 创建支付。
 
+MySQL 与 Vercel Postgres 的运行态快照可通过脚本同步：
+
+```bash
+npm run db:sync -- mysql-to-postgres
+npm run db:sync -- postgres-to-mysql
+```
+
 高并发生产前建议继续替换：
 
-- MySQL runtime snapshot -> 表级 Repository 和事务边界。
+- Database runtime snapshot -> 表级 Repository 和事务边界。
 - 通用内容安全 Provider -> 正式内容安全 SDK 或公司内部风控服务。
 - 模型 HTTP Provider -> 统一模型网关、任务回调和重试补偿。
 

@@ -44,7 +44,7 @@ config/
   application.prod.env.example  # 生产：真实中间件配置模板
 docs/
   api_doc/                      # 前后端接口契约
-  sql/                          # MySQL 初始化脚本
+  sql/                          # MySQL / Postgres 初始化脚本
 tests/
   *.test.mjs                    # Node test 接口级测试
 ```
@@ -79,7 +79,7 @@ local 必须全部 mock：
 test/prod 必须使用真实中间件能力：
 
 - Redis：短信验证码、登录 token。
-- MySQL：`daone_runtime_store` 运行态快照。后续高并发生产应演进为表级 Repository。
+- MySQL 或 Vercel Postgres：`daone_runtime_store` 运行态快照。通过 `DAONE_DB_TYPE=mysql|postgres` 选择，后续高并发生产应演进为表级 Repository。
 - OSS：PUT 预签名上传。
 - 短信：阿里云短信。
 - 内容安全：HTTP Provider。

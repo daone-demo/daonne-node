@@ -16,7 +16,7 @@ import * as trialService from "../service/billing/trialService.js";
 import * as homeService from "../service/home/homeService.js";
 import * as adminService from "../service/operation/adminService.js";
 import { docsHtml, openApiSpec } from "./openapi.js";
-import { hydrateRuntimeStore, persistRuntimeStore } from "../infrastructure/middleware/mysqlRuntimeStore.js";
+import { hydrateRuntimeStore, persistRuntimeStore } from "../infrastructure/middleware/runtimeStore.js";
 
 const router = new Router();
 

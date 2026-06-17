@@ -31,6 +31,15 @@ export const appConfig = {
       username: env("MYSQL_USERNAME", ""),
       password: env("MYSQL_PASSWORD", "")
     },
+    postgres: {
+      url: env("POSTGRES_URL", ""),
+      host: env("POSTGRES_HOST", ""),
+      port: numberEnv("POSTGRES_PORT", 5432),
+      database: env("POSTGRES_DATABASE", ""),
+      username: env("POSTGRES_USER", ""),
+      password: env("POSTGRES_PASSWORD", ""),
+      ssl: boolEnv("POSTGRES_SSL", !isLocal())
+    },
     redis: {
       enabled: boolEnv("REDIS_ENABLED", !isLocal()),
       url: env("REDIS_URL", ""),
@@ -104,7 +113,9 @@ export function configHealth() {
       payment: appConfig.payment.mockEnabled
     },
     middleware: {
+      runtimeStore: !isLocal() && ["mysql", "postgres"].includes(appConfig.dataSource.type),
       mysqlRuntimeStore: !isLocal() && appConfig.dataSource.type === "mysql",
+      postgresRuntimeStore: !isLocal() && appConfig.dataSource.type === "postgres",
       redisCache: !isLocal() && (appConfig.dataSource.redis.enabled || appConfig.auth.cacheType === "redis"),
       ossSignedUpload: !appConfig.storage.mockEnabled,
       smsProvider: !appConfig.sms.mockEnabled,
@@ -135,6 +146,16 @@ function missingRequiredConfig() {
       "MYSQL_USERNAME",
       "MYSQL_PASSWORD"
     ]);
+  }
+  if (appConfig.dataSource.type === "postgres") {
+    requireOneOf(missing, ["POSTGRES_URL", "POSTGRES_HOST"]);
+    if (!process.env.POSTGRES_URL) {
+      requireKeys(missing, [
+        "POSTGRES_DATABASE",
+        "POSTGRES_USER",
+        "POSTGRES_PASSWORD"
+      ]);
+    }
   }
 
   if (appConfig.dataSource.redis.enabled || appConfig.auth.cacheType === "redis") {
@@ -185,8 +206,8 @@ function missingRequiredConfig() {
 
 function configWarnings() {
   const warnings = [];
-  if (!isLocal() && appConfig.dataSource.type === "mysql") {
-    warnings.push("The Node/Vercel runtime uses a MySQL snapshot bridge. Replace it with table-level repositories before high-concurrency production traffic.");
+  if (!isLocal() && ["mysql", "postgres"].includes(appConfig.dataSource.type)) {
+    warnings.push("The Node/Vercel runtime uses a database snapshot bridge. Replace it with table-level repositories before high-concurrency production traffic.");
   }
   return warnings;
 }
