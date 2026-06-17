@@ -1,6 +1,7 @@
 import pg from "pg";
 import { appConfig } from "../config/env.js";
 import { exportStoreSnapshot, importStoreSnapshot } from "../db/memoryStore.js";
+import { mirrorPostgresBusinessTables } from "./postgresBusinessMirror.js";
 
 const { Pool } = pg;
 const STORE_KEY = "daone-memory-store-v1";
@@ -40,6 +41,7 @@ export async function persistPostgresRuntimeStore() {
      DO UPDATE SET store_value = EXCLUDED.store_value, updated_at = NOW()`,
     [STORE_KEY, payload]
   );
+  await mirrorPostgresBusinessTables(getPool());
 }
 
 export async function postgresRuntimeStoreHealth() {
@@ -65,7 +67,7 @@ async function ensureRuntimeTable() {
   initialized = true;
 }
 
-function getPool() {
+export function getPool() {
   if (!pool) {
     const config = appConfig.dataSource.postgres.url
       ? { connectionString: appConfig.dataSource.postgres.url }
