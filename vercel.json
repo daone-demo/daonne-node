@@ -2,11 +2,20 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
   "functions": {
+    "api/index.js": {
+      "maxDuration": 10
+    },
     "api/v3/swagger.js": {
       "maxDuration": 10
     },
     "api/[...path].js": {
       "maxDuration": 10
     }
-  }
+  },
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "/api?__daone_path=:path*"
+    }
+  ]
 }

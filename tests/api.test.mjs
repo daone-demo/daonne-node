@@ -3,11 +3,19 @@ import { describe, it } from "node:test";
 
 process.env.DAONE_ADMIN_PHONES = "13800138000";
 const { handleRequest } = await import("../src/starter/app.js");
+const { default: vercelIndexHandler } = await import("../api/index.js");
 const { appConfig } = await import("../src/infrastructure/config/env.js");
 
 describe("Daone Vercel Node API", () => {
   it("supports core frontend flow", async () => {
     let response = await request("POST", "/api/v1/auth/sms-codes", {
+      phone: "13800138000",
+      scene: "LOGIN"
+    });
+    assert.equal(response.status, 200);
+    assert.equal(response.body.code, "OK");
+
+    response = await requestViaVercelIndex("POST", "/api/v1/auth/sms-codes", {
       phone: "13800138000",
       scene: "LOGIN"
     });
@@ -256,6 +264,27 @@ async function request(method, path, body = null, token = null, extraHeaders = {
     rawBody: res.body,
     headers: res.headers
   };
+}
+
+async function requestViaVercelIndex(method, path, body = null, token = null, extraHeaders = {}) {
+  const req = makeReq(method, rewrittenIndexPath(path), body, token, extraHeaders);
+  const res = makeRes();
+  await vercelIndexHandler(req, res);
+  return {
+    status: res.statusCode,
+    body: parseJson(res.body),
+    rawBody: res.body,
+    headers: res.headers
+  };
+}
+
+function rewrittenIndexPath(path) {
+  const url = new URL(path, "http://localhost:8080");
+  const rewrittenPath = url.pathname.startsWith("/api/")
+    ? url.pathname.slice("/api/".length)
+    : url.pathname.replace(/^\//, "");
+  url.searchParams.set("__daone_path", rewrittenPath);
+  return `/api?${url.searchParams.toString()}`;
 }
 
 function makeReq(method, path, body, token, extraHeaders) {
