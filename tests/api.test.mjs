@@ -37,6 +37,18 @@ describe("Daone Vercel Node API", () => {
     const token = response.body.data.token;
     assert.ok(token.startsWith("dn_"));
 
+    response = await request("POST", "/api/v1/auth/sms-codes", {
+      phone: "13800138001",
+      scene: "login"
+    });
+    assert.equal(response.status, 200);
+
+    response = await request("POST", "/api/v1/auth/sms-login", {
+      phone: " 13800138001 ",
+      code: " 123456 "
+    });
+    assert.equal(response.status, 200);
+
     response = await request("GET", "/api/v1/home?categoryCode=BRAND", null, token);
     assert.equal(response.status, 200);
     assert.equal(response.body.data.inspirationCategories.length, 9);

@@ -7,30 +7,34 @@ import { cacheDel, cacheGetJson, cacheSetJson, redisCacheEnabled } from "../../i
 import { sendSms } from "../../infrastructure/middleware/smsClient.js";
 
 export async function sendSmsCode(phone, scene = "LOGIN") {
-  assertPhone(phone);
+  const normalizedPhone = normalizePhone(phone);
+  const normalizedScene = normalizeScene(scene);
+  assertPhone(normalizedPhone);
   const code = appConfig.sms.mockEnabled ? appConfig.auth.localSmsCode : randomSmsCode();
   const payload = {
     code,
     expiresAt: Date.now() + appConfig.auth.smsCodeTtlSeconds * 1000,
     sentAt: Date.now(),
-    scene
+    scene: normalizedScene
   };
   if (redisCacheEnabled()) {
-    await cacheSetJson(smsKey(phone, scene), payload, appConfig.auth.smsCodeTtlSeconds);
+    await cacheSetJson(smsKey(normalizedPhone, normalizedScene), payload, appConfig.auth.smsCodeTtlSeconds);
   } else {
-    store.smsCodes.set(smsKey(phone, scene), payload);
+    store.smsCodes.set(smsKey(normalizedPhone, normalizedScene), payload);
   }
-  await sendSms(phone, code, scene);
+  await sendSms(normalizedPhone, code, normalizedScene);
   return { retryAfterSeconds: 60 };
 }
 
 export async function loginBySms(phone, code) {
-  assertPhone(phone);
-  const cached = await getSmsCode(phone, "LOGIN");
-  if (!cached || cached.expiresAt < Date.now() || cached.code !== code) {
+  const normalizedPhone = normalizePhone(phone);
+  const normalizedCode = normalizeCode(code);
+  assertPhone(normalizedPhone);
+  const cached = await getSmsCode(normalizedPhone, "LOGIN");
+  if (!cached || cached.expiresAt < Date.now() || cached.code !== normalizedCode) {
     throw badRequest("SMS_CODE_INVALID", "验证码错误或已过期");
   }
-  let user = ensureUserByPhone(phone);
+  let user = ensureUserByPhone(normalizedPhone);
   if (user.status !== "ENABLED") {
     throw badRequest("USER_DISABLED", "账号已被禁用");
   }
@@ -90,16 +94,20 @@ export function getQrStatus(ticket) {
 }
 
 export async function verifySmsCode(phone, code, scene) {
-  assertPhone(phone);
-  const cached = await getSmsCode(phone, scene);
-  if (!cached || cached.expiresAt < Date.now() || cached.code !== code) {
+  const normalizedPhone = normalizePhone(phone);
+  const normalizedCode = normalizeCode(code);
+  const normalizedScene = normalizeScene(scene);
+  assertPhone(normalizedPhone);
+  const cached = await getSmsCode(normalizedPhone, normalizedScene);
+  if (!cached || cached.expiresAt < Date.now() || cached.code !== normalizedCode) {
     throw badRequest("SMS_CODE_INVALID", "验证码错误或已过期");
   }
 }
 
 export function ensureUserByPhone(phone, defaults = {}) {
-  assertPhone(phone);
-  let user = [...store.users.values()].find((item) => item.phone === phone);
+  const normalizedPhone = normalizePhone(phone);
+  assertPhone(normalizedPhone);
+  let user = [...store.users.values()].find((item) => item.phone === normalizedPhone);
   if (user) {
     return user;
   }
@@ -107,14 +115,14 @@ export function ensureUserByPhone(phone, defaults = {}) {
   const t = new Date().toISOString();
   user = {
     id,
-    phone,
-    nickname: defaults.nickname || `Daone${phone.slice(-4)}`,
+    phone: normalizedPhone,
+    nickname: defaults.nickname || `Daone${normalizedPhone.slice(-4)}`,
     avatarUrl: null,
     email: null,
     gender: "UNKNOWN",
     birthday: null,
     status: "ENABLED",
-    role: adminPhones().includes(phone) ? "ADMIN" : "USER",
+    role: adminPhones().includes(normalizedPhone) ? "ADMIN" : "USER",
     createdAt: t,
     updatedAt: t
   };
@@ -141,6 +149,21 @@ function assertPhone(phone) {
   if (!/^1\d{10}$/.test(phone || "")) {
     throw badRequest("PARAM_INVALID", "手机号格式不正确");
   }
+}
+
+function normalizePhone(phone) {
+  return String(phone || "").trim();
+}
+
+function normalizeCode(code) {
+  return String(code || "").trim();
+}
+
+function normalizeScene(scene = "LOGIN") {
+  const value = String(scene || "LOGIN").trim().toUpperCase().replace(/[-\s]/g, "_");
+  if (["1", "LOGIN", "SMS_LOGIN", "AUTH_LOGIN"].includes(value)) return "LOGIN";
+  if (["2", "TRIAL", "TRIAL_APPLICATION"].includes(value)) return "TRIAL";
+  return value;
 }
 
 function adminPhones() {
