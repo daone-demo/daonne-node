@@ -246,6 +246,9 @@ describe("Daone Vercel Node API", () => {
     response = await request("GET", "/api/v3/swagger");
     assert.equal(response.status, 200);
     assert.equal(response.body.info.title, "Daone Node API");
+    assert.equal(response.body.paths["/v1/auth/sms-codes"].post.requestBody.content["application/json"].schema.$ref, "#/components/schemas/SmsCodeRequest");
+    assert.equal(response.body.paths["/v1/projects"].get.parameters.some((parameter) => parameter.name === "keyword" && parameter.in === "query"), true);
+    assert.equal(response.body.paths["/v1/projects/{projectId}"].get.parameters.some((parameter) => parameter.name === "projectId" && parameter.in === "path"), true);
 
     response = await request("GET", "/api/doc.html");
     assert.equal(response.status, 200);
