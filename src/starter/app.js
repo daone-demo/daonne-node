@@ -16,7 +16,7 @@ import * as trialService from "../service/billing/trialService.js";
 import * as homeService from "../service/home/homeService.js";
 import * as adminService from "../service/operation/adminService.js";
 import { docsHtml, openApiSpec } from "./openapi.js";
-import { hydrateRuntimeStore, persistRuntimeStore } from "../infrastructure/middleware/runtimeStore.js";
+import { hydrateRuntimeStore, persistRuntimeStore, runtimeStoreHealth } from "../infrastructure/middleware/runtimeStore.js";
 
 const router = new Router();
 
@@ -143,7 +143,15 @@ router.put("/api/admin/v1/inspirations/:id", async ({ params, body }) => adminSe
 router.get("/api/v3/swagger", async () => openApiSpec(), { public: true, rawSuccess: true });
 router.get("/api/doc.html", async () => html(docsHtml()), { public: true });
 router.get("/api/swagger-ui.html", async () => html(docsHtml()), { public: true });
-router.get("/api/health", async () => ({ status: "UP", runtime: "nodejs-vercel", ...configHealth() }), { public: true });
+router.get("/api/health", async () => {
+  const database = await safeRuntimeStoreHealth();
+  return {
+    status: database.status === "DOWN" ? "DEGRADED" : "UP",
+    runtime: "nodejs-vercel",
+    ...configHealth(),
+    database
+  };
+}, { public: true });
 
 export async function handleRequest(req, res) {
   const trace = traceId();
@@ -233,6 +241,18 @@ function noContent() {
 
 function isOperationalRoute(pathname) {
   return pathname === "/api/health" || pathname === "/api/v3/swagger" || pathname === "/api/doc.html" || pathname === "/api/swagger-ui.html";
+}
+
+async function safeRuntimeStoreHealth() {
+  try {
+    return await runtimeStoreHealth();
+  } catch (error) {
+    return {
+      enabled: true,
+      status: "DOWN",
+      message: error.message
+    };
+  }
 }
 
 function sendMockFile(res, trace, objectKey) {

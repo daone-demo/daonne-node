@@ -11,8 +11,8 @@ const required = [
   "src/starter/app.js",
   "src/infrastructure/config/env.js",
   "config/application.local.env",
-  "config/application.test.env.example",
-  "config/application.prod.env.example",
+  "config/application.test.env",
+  "config/application.prod.env",
   "public/index.html",
   "vercel.json"
 ];
