@@ -10,9 +10,9 @@ const required = [
   "package.json",
   "src/starter/app.js",
   "src/infrastructure/config/env.js",
-  "config/application.local.env",
-  "config/application.test.env",
-  "config/application.prod.env",
+  ".env.development.local",
+  ".env.test.local",
+  ".env.prod.local",
   "public/index.html",
   "vercel.json"
 ];
