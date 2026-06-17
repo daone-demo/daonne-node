@@ -235,9 +235,14 @@ describe("Daone Vercel Node API", () => {
     response = await request("DELETE", `/api/v1/projects/${projectId}/shares/${shareCode}`, null, token);
     assert.equal(response.status, 204);
 
-    response = await request("GET", "/api/v3/api-docs");
+    response = await request("GET", "/api/v3/swagger");
     assert.equal(response.status, 200);
     assert.equal(response.body.info.title, "Daone Node API");
+
+    response = await request("GET", "/api/doc.html");
+    assert.equal(response.status, 200);
+    assert.match(response.rawBody, /SwaggerUIBundle/);
+    assert.match(response.rawBody, /\/api\/v3\/swagger/);
   });
 });
 

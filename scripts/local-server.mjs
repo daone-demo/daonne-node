@@ -16,5 +16,6 @@ const server = http.createServer((req, res) => {
 
 server.listen(port, () => {
   console.log(`Daone Node API listening on http://localhost:${port}`);
-  console.log(`OpenAPI: http://localhost:${port}/api/v3/api-docs`);
+  console.log(`OpenAPI: http://localhost:${port}/api/v3/swagger`);
+  console.log(`Swagger UI: http://localhost:${port}/api/doc.html`);
 });

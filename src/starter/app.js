@@ -140,8 +140,9 @@ router.get("/api/admin/v1/inspirations", async () => ({ items: adminService.insp
 router.post("/api/admin/v1/inspirations", async ({ body }) => adminService.saveInspiration(body), { admin: true });
 router.put("/api/admin/v1/inspirations/:id", async ({ params, body }) => adminService.saveInspiration(body, params.id), { admin: true });
 
-router.get("/api/v3/api-docs", async () => openApiSpec(), { public: true, rawSuccess: true });
+router.get("/api/v3/swagger", async () => openApiSpec(), { public: true, rawSuccess: true });
 router.get("/api/doc.html", async () => html(docsHtml()), { public: true });
+router.get("/api/swagger-ui.html", async () => html(docsHtml()), { public: true });
 router.get("/api/health", async () => ({ status: "UP", runtime: "nodejs-vercel", ...configHealth() }), { public: true });
 
 export async function handleRequest(req, res) {
@@ -231,7 +232,7 @@ function noContent() {
 }
 
 function isOperationalRoute(pathname) {
-  return pathname === "/api/health" || pathname === "/api/v3/api-docs" || pathname === "/api/doc.html";
+  return pathname === "/api/health" || pathname === "/api/v3/swagger" || pathname === "/api/doc.html" || pathname === "/api/swagger-ui.html";
 }
 
 function sendMockFile(res, trace, objectKey) {

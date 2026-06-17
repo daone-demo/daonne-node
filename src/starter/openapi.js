@@ -79,8 +79,9 @@ export function openApiSpec() {
       "/mock-files/upload": { post: { summary: "本地 Mock 上传，仅 storage mock 启用时可用" } },
       "/mock-files/{objectKey}": { get: { summary: "本地 Mock 文件读取，仅 storage mock 启用时可用" } },
       "/health": { get: { summary: "健康检查与环境配置状态" } },
-      "/v3/api-docs": { get: { summary: "OpenAPI JSON" } },
-      "/doc.html": { get: { summary: "接口文档页" } }
+      "/v3/swagger": { get: { summary: "OpenAPI JSON" } },
+      "/doc.html": { get: { summary: "Swagger UI 接口文档页" } },
+      "/swagger-ui.html": { get: { summary: "Swagger UI 接口文档页" } }
     }
   };
 }
@@ -91,21 +92,33 @@ export function docsHtml() {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Daone Node API</title>
+  <title>Daone Node API Swagger UI</title>
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5.17.14/swagger-ui.css" />
   <style>
-    body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;margin:40px;line-height:1.6;color:#111}
-    code{background:#f4f4f5;padding:2px 6px;border-radius:4px}
-    a{color:#2563eb}
+    body{margin:0;background:#fff}
+    .swagger-ui .topbar{display:none}
   </style>
 </head>
 <body>
-  <h1>Daone Node API</h1>
-  <p>这是适配 Vercel Serverless 的 Node.js 后端。</p>
-  <ul>
-    <li><a href="/api/v3/api-docs">OpenAPI JSON</a></li>
-    <li>接口前缀：<code>/api/v1</code></li>
-    <li>后台前缀：<code>/api/admin/v1</code></li>
-  </ul>
+  <div id="swagger-ui"></div>
+  <script src="https://unpkg.com/swagger-ui-dist@5.17.14/swagger-ui-bundle.js"></script>
+  <script src="https://unpkg.com/swagger-ui-dist@5.17.14/swagger-ui-standalone-preset.js"></script>
+  <script>
+    window.addEventListener("load", () => {
+      window.ui = SwaggerUIBundle({
+        url: "/api/v3/swagger",
+        dom_id: "#swagger-ui",
+        deepLinking: true,
+        presets: [
+          SwaggerUIBundle.presets.apis,
+          SwaggerUIStandalonePreset
+        ],
+        layout: "StandaloneLayout",
+        persistAuthorization: true,
+        displayRequestDuration: true
+      });
+    });
+  </script>
 </body>
 </html>`;
 }

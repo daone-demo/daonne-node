@@ -22,8 +22,8 @@ npm start
 本地服务地址：
 
 - Health: `http://localhost:8080/api/health`
-- OpenAPI: `http://localhost:8080/api/v3/api-docs`
-- 简易文档页: `http://localhost:8080/api/doc.html`
+- OpenAPI: `http://localhost:8080/api/v3/swagger`
+- Swagger UI: `http://localhost:8080/api/doc.html`
 
 ## Vercel Deploy
 

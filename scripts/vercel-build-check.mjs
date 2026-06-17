@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 
 const required = [
-  "api/v3/api-docs.js",
+  "api/v3/swagger.js",
   "api/[...path].js",
   "package.json",
   "src/starter/app.js",
@@ -30,7 +30,7 @@ const vercelJson = readJson("vercel.json");
 if (vercelJson.version !== 2) {
   throw new Error("vercel.json version must be 2");
 }
-for (const functionPath of ["api/v3/api-docs.js", "api/[...path].js"]) {
+for (const functionPath of ["api/v3/swagger.js", "api/[...path].js"]) {
   const apiFunction = vercelJson.functions?.[functionPath];
   if (!apiFunction) {
     throw new Error(`vercel.json must configure ${functionPath}`);
