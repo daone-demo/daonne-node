@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 
 const required = [
+  "api/v3/api-docs.js",
   "api/[...path].js",
   "package.json",
   "src/starter/app.js",
@@ -29,15 +30,17 @@ const vercelJson = readJson("vercel.json");
 if (vercelJson.version !== 2) {
   throw new Error("vercel.json version must be 2");
 }
-const apiFunction = vercelJson.functions?.["api/[...path].js"];
-if (!apiFunction) {
-  throw new Error("vercel.json must configure api/[...path].js");
-}
-if ("runtime" in apiFunction) {
-  throw new Error("Do not set functions.runtime for official Node.js functions; use package.json engines.node");
-}
-if (!Number.isInteger(apiFunction.maxDuration) || apiFunction.maxDuration < 1 || apiFunction.maxDuration > 60) {
-  throw new Error("api/[...path].js maxDuration must be an integer between 1 and 60 seconds");
+for (const functionPath of ["api/v3/api-docs.js", "api/[...path].js"]) {
+  const apiFunction = vercelJson.functions?.[functionPath];
+  if (!apiFunction) {
+    throw new Error(`vercel.json must configure ${functionPath}`);
+  }
+  if ("runtime" in apiFunction) {
+    throw new Error("Do not set functions.runtime for official Node.js functions; use package.json engines.node");
+  }
+  if (!Number.isInteger(apiFunction.maxDuration) || apiFunction.maxDuration < 1 || apiFunction.maxDuration > 60) {
+    throw new Error(`${functionPath} maxDuration must be an integer between 1 and 60 seconds`);
+  }
 }
 
 console.log("Vercel build check passed.");
