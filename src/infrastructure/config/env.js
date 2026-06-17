@@ -234,7 +234,7 @@ function resolveProfile() {
   if (process.env.DAONE_PROFILE) return process.env.DAONE_PROFILE;
   if (process.env.VERCEL_ENV === "production") return "prod";
   if (process.env.VERCEL_ENV === "preview") return "test";
-  return "local";
+  return "test";
 }
 
 function isLocal() {
