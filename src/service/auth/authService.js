@@ -5,6 +5,7 @@ import { nextId } from "../../infrastructure/common/id.js";
 import { badRequest, unauthorized } from "../common/errors.js";
 import { cacheDel, cacheGetJson, cacheSetJson, redisCacheEnabled } from "../../infrastructure/middleware/redisCache.js";
 import { sendSms } from "../../infrastructure/middleware/smsClient.js";
+import { findOrCreatePostgresUser } from "../../infrastructure/middleware/postgresRuntimeStore.js";
 
 export async function sendSmsCode(phone, scene = "LOGIN") {
   const normalizedPhone = normalizePhone(phone);
@@ -34,7 +35,7 @@ export async function loginBySms(phone, code) {
   if (!cached || cached.expiresAt < Date.now() || cached.code !== normalizedCode) {
     throw badRequest("SMS_CODE_INVALID", "验证码错误或已过期");
   }
-  let user = ensureUserByPhone(normalizedPhone);
+  const user = await ensureUserByPhone(normalizedPhone);
   if (user.status !== "ENABLED") {
     throw badRequest("USER_DISABLED", "账号已被禁用");
   }
@@ -104,9 +105,22 @@ export async function verifySmsCode(phone, code, scene) {
   }
 }
 
-export function ensureUserByPhone(phone, defaults = {}) {
+export async function ensureUserByPhone(phone, defaults = {}) {
   const normalizedPhone = normalizePhone(phone);
   assertPhone(normalizedPhone);
+  const persisted = await findOrCreatePostgresUser({
+    phone: normalizedPhone,
+    nickname: defaults.nickname || `Daone${normalizedPhone.slice(-4)}`,
+    role: adminPhones().includes(normalizedPhone) ? "ADMIN" : "USER"
+  });
+  if (persisted) {
+    store.users.set(persisted.user.id, persisted.user);
+    store.pointAccounts.set(
+      persisted.user.id,
+      persisted.pointAccount || newPointAccount(persisted.user.id, persisted.user.createdAt)
+    );
+    return persisted.user;
+  }
   let user = [...store.users.values()].find((item) => item.phone === normalizedPhone);
   if (user) {
     return user;
@@ -127,14 +141,19 @@ export function ensureUserByPhone(phone, defaults = {}) {
     updatedAt: t
   };
   store.users.set(id, user);
-  store.pointAccounts.set(id, {
-    userId: id,
+  store.pointAccounts.set(id, newPointAccount(id, t));
+  return user;
+}
+
+function newPointAccount(userId, updatedAt) {
+  return {
+    userId,
     availablePoints: 100,
     frozenPoints: 0,
     grantedTotal: 100,
-    updatedAt: t
-  });
-  return user;
+    version: 0,
+    updatedAt
+  };
 }
 
 function toLoginUser(user) {

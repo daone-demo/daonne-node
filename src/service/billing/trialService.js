@@ -14,7 +14,7 @@ export async function createTrialApplication(body, idempotencyKey) {
     throw badRequest("PARAM_INVALID", "职位不能为空");
   }
   await verifySmsCode(body.phone, body.code, "TRIAL");
-  const user = ensureUserByPhone(body.phone, { nickname: body.contactName });
+  const user = await ensureUserByPhone(body.phone, { nickname: body.contactName });
   return createOrder(user.id, idempotencyKey || `trial:${body.phone}`, {
     orderType: "PLAN",
     productCode: "TRIAL_5D"
