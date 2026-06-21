@@ -22,6 +22,8 @@ const router = new Router();
 
 router.post("/api/v1/auth/sms-codes", async ({ body }) => auth.sendSmsCode(body.phone, body.scene || "LOGIN"), { public: true });
 router.post("/api/v1/auth/sms-login", async ({ body }) => auth.loginBySms(body.phone, body.code), { public: true });
+router.post("/api/admin/v1/sms-codes", async ({ body }) => auth.sendAdminSmsCode(body.phone, body.scene), { public: true });
+router.post("/api/admin/v1/sms-login", async ({ body }) => auth.loginAdminBySms(body.phone, body.code), { public: true });
 router.post("/api/v1/auth/wechat/qr-sessions", async () => auth.createQrSession(), { public: true });
 router.get("/api/v1/auth/wechat/qr-sessions/:ticket", async ({ params }) => auth.getQrStatus(params.ticket), { public: true });
 router.post("/api/v1/auth/logout", async ({ token }) => {

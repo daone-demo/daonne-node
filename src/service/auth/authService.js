@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import { appConfig } from "../../infrastructure/config/env.js";
 import { store } from "../../infrastructure/db/memoryStore.js";
 import { nextId } from "../../infrastructure/common/id.js";
-import { badRequest, unauthorized } from "../common/errors.js";
+import { badRequest, forbidden, unauthorized } from "../common/errors.js";
 import { cacheDel, cacheGetJson, cacheSetJson, redisCacheEnabled } from "../../infrastructure/middleware/redisCache.js";
 import { sendSms } from "../../infrastructure/middleware/smsClient.js";
 import { findOrCreatePostgresUser } from "../../infrastructure/middleware/postgresRuntimeStore.js";
@@ -39,7 +39,35 @@ export async function loginBySms(phone, code) {
   if (user.status !== "ENABLED") {
     throw badRequest("USER_DISABLED", "账号已被禁用");
   }
-  user.role = adminPhones().includes(phone) ? "ADMIN" : user.role;
+  user.role = adminPhones().includes(normalizedPhone) ? "ADMIN" : user.role;
+  return createLoginSession(user);
+}
+
+export async function sendAdminSmsCode(phone, scene = "ADMIN_LOGIN") {
+  const normalizedPhone = normalizePhone(phone);
+  assertPhone(normalizedPhone);
+  assertAdminPhone(normalizedPhone);
+  return sendSmsCode(normalizedPhone, normalizeAdminScene(scene));
+}
+
+export async function loginAdminBySms(phone, code) {
+  const normalizedPhone = normalizePhone(phone);
+  const normalizedCode = normalizeCode(code);
+  assertPhone(normalizedPhone);
+  assertAdminPhone(normalizedPhone);
+  const cached = await getSmsCode(normalizedPhone, "ADMIN_LOGIN");
+  if (!cached || cached.expiresAt < Date.now() || cached.code !== normalizedCode) {
+    throw badRequest("SMS_CODE_INVALID", "验证码错误或已过期");
+  }
+  const user = await ensureUserByPhone(normalizedPhone);
+  if (user.status !== "ENABLED") {
+    throw badRequest("USER_DISABLED", "账号已被禁用");
+  }
+  user.role = "ADMIN";
+  return createLoginSession(user, true);
+}
+
+async function createLoginSession(user, includeAdminFields = false) {
   const token = `dn_${crypto.randomUUID().replaceAll("-", "")}`;
   const session = {
     userId: user.id,
@@ -53,7 +81,7 @@ export async function loginBySms(phone, code) {
   return {
     token,
     expiresInSeconds: appConfig.auth.tokenTtlSeconds,
-    user: toLoginUser(user)
+    user: includeAdminFields ? toAdminLoginUser(user) : toLoginUser(user)
   };
 }
 
@@ -164,6 +192,14 @@ function toLoginUser(user) {
   };
 }
 
+function toAdminLoginUser(user) {
+  return {
+    ...toLoginUser(user),
+    phone: user.phone,
+    role: user.role
+  };
+}
+
 function assertPhone(phone) {
   if (!/^1\d{10}$/.test(phone || "")) {
     throw badRequest("PARAM_INVALID", "手机号格式不正确");
@@ -183,6 +219,20 @@ function normalizeScene(scene = "LOGIN") {
   if (["1", "LOGIN", "SMS_LOGIN", "AUTH_LOGIN"].includes(value)) return "LOGIN";
   if (["2", "TRIAL", "TRIAL_APPLICATION"].includes(value)) return "TRIAL";
   return value;
+}
+
+function normalizeAdminScene(scene = "ADMIN_LOGIN") {
+  const value = normalizeScene(scene);
+  if (["LOGIN", "ADMIN_LOGIN", "ADMIN_SMS_LOGIN"].includes(value)) {
+    return "ADMIN_LOGIN";
+  }
+  throw badRequest("PARAM_INVALID", "管理后台验证码场景仅支持登录");
+}
+
+function assertAdminPhone(phone) {
+  if (!adminPhones().includes(phone)) {
+    throw forbidden();
+  }
 }
 
 function adminPhones() {

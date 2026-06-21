@@ -29,6 +29,27 @@ describe("Daone Vercel Node API", () => {
     assert.equal(response.body.data.dataSourceType, "memory");
     assert.equal(response.body.data.mocks.storage, true);
 
+    response = await request("POST", "/api/admin/v1/sms-codes", {
+      phone: "13800138000",
+      scene: "LOGIN"
+    });
+    assert.equal(response.status, 200);
+
+    response = await request("POST", "/api/admin/v1/sms-login", {
+      phone: "13800138000",
+      code: "123456"
+    });
+    assert.equal(response.status, 200);
+    assert.equal(response.body.data.user.phone, "13800138000");
+    assert.equal(response.body.data.user.role, "ADMIN");
+    assert.ok(response.body.data.token.startsWith("dn_"));
+
+    response = await request("POST", "/api/admin/v1/sms-codes", {
+      phone: "13900139000",
+      scene: "LOGIN"
+    });
+    assert.equal(response.status, 403);
+
     response = await request("POST", "/api/v1/auth/sms-login", {
       phone: "13800138000",
       code: "123456"
@@ -270,6 +291,8 @@ describe("Daone Vercel Node API", () => {
     assert.equal(response.status, 200);
     assert.equal(response.body.info.title, "Daone Node API");
     assert.equal(response.body.paths["/v1/auth/sms-codes"].post.requestBody.content["application/json"].schema.$ref, "#/components/schemas/SmsCodeRequest");
+    assert.equal(response.body.paths["/admin/v1/sms-codes"].post.requestBody.content["application/json"].schema.$ref, "#/components/schemas/AdminSmsCodeRequest");
+    assert.equal(response.body.paths["/admin/v1/sms-login"].post.requestBody.content["application/json"].schema.$ref, "#/components/schemas/AdminSmsLoginRequest");
     assert.equal(response.body.paths["/v1/projects"].get.parameters.some((parameter) => parameter.name === "keyword" && parameter.in === "query"), true);
     assert.equal(response.body.paths["/v1/projects/{projectId}"].get.parameters.some((parameter) => parameter.name === "projectId" && parameter.in === "path"), true);
 

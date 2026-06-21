@@ -35,6 +35,14 @@ export function openApiSpec() {
           phone: string("13800138000", "手机号"),
           code: string("123456", "短信验证码")
         }, "短信登录请求", ["phone", "code"]),
+        AdminSmsCodeRequest: object({
+          phone: string("13800138000", "管理员手机号"),
+          scene: string("LOGIN", "使用场景，仅支持登录")
+        }, "管理后台发送短信验证码请求", ["phone", "scene"]),
+        AdminSmsLoginRequest: object({
+          phone: string("13800138000", "管理员手机号"),
+          code: string("123456", "短信验证码")
+        }, "管理后台短信登录请求", ["phone", "code"]),
         UserProfileUpdateRequest: object({
           nickname: string("Daone 用户", "昵称"),
           avatarUrl: string("https://example.com/avatar.png", "头像 URL")
@@ -183,6 +191,8 @@ export function openApiSpec() {
     paths: {
       "/v1/auth/sms-codes": { post: op("发送短信验证码", { public: true, body: "SmsCodeRequest" }) },
       "/v1/auth/sms-login": { post: op("手机验证码登录", { public: true, body: "SmsLoginRequest" }) },
+      "/admin/v1/sms-codes": { post: op("管理后台发送短信验证码", { public: true, body: "AdminSmsCodeRequest" }) },
+      "/admin/v1/sms-login": { post: op("管理后台手机验证码登录", { public: true, body: "AdminSmsLoginRequest" }) },
       "/v1/auth/wechat/qr-sessions": { post: op("创建微信扫码登录会话", { public: true }) },
       "/v1/auth/wechat/qr-sessions/{ticket}": { get: op("查询微信扫码状态", { public: true, params: [pathParam("ticket", "微信扫码登录票据")] }) },
       "/v1/auth/logout": { post: op("退出登录") },
