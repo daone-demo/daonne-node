@@ -57,15 +57,31 @@ export function openApiSpec() {
           revision: integer(0, "客户端当前画布版本"),
           saveType: string("MANUAL", "保存类型"),
           canvasData: object({
-            schemaVersion: integer(1),
-            nodes: array(object({}, "节点")),
-            edges: array(object({}, "连线")),
+            version: integer(1, "快照版本"),
+            savedAt: string("2026-06-22T03:29:02.477Z", "保存时间"),
+            meta: object({
+              projectId: string("100000000000000001", "项目 ID"),
+              projectName: string("未命名创作", "项目名称"),
+              canvasBgTheme: string("light", "画布主题"),
+              gridVisible: boolean(false, "是否显示网格"),
+              panMode: boolean(false, "是否平移模式"),
+              showMinimap: boolean(false, "是否显示小地图")
+            }, "画布元信息"),
             viewport: object({
-              x: number(0),
-              y: number(0),
-              zoom: number(1)
-            }, "视口")
-          }, "画布 JSON 数据")
+              zoom: number(1),
+              translateX: number(0),
+              translateY: number(0),
+              scrollLeft: number(0),
+              scrollTop: number(0)
+            }, "视口"),
+            graph: object({
+              cells: array(object({}, "X6 节点/连线"))
+            }, "X6 图数据"),
+            summary: object({
+              nodeCount: integer(0),
+              edgeCount: integer(0)
+            }, "画布摘要")
+          }, "画布快照 JSON 数据")
         }, "保存画布请求", ["revision", "canvasData"]),
         ShareCreateRequest: object({
           expireDays: integer(7, "有效天数")
@@ -380,6 +396,13 @@ function integer(example, description) {
 
 function number(example, description) {
   const schema = { type: "number" };
+  if (example !== undefined) schema.example = example;
+  if (description) schema.description = description;
+  return schema;
+}
+
+function boolean(example, description) {
+  const schema = { type: "boolean" };
   if (example !== undefined) schema.example = example;
   if (description) schema.description = description;
   return schema;

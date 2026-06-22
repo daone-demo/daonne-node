@@ -99,15 +99,41 @@ describe("Daone Vercel Node API", () => {
     response = await request("PUT", `/api/v1/projects/${projectId}/canvas`, {
       revision: 0,
       saveType: "MANUAL",
-      canvasData: { schemaVersion: 1, nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 } }
+      canvasData: {
+        version: 1,
+        savedAt: new Date().toISOString(),
+        meta: {
+          projectId,
+          projectName: "测试项目",
+          canvasBgTheme: "light",
+          gridVisible: false,
+          panMode: false,
+          showMinimap: false
+        },
+        viewport: {
+          zoom: 1,
+          translateX: 0,
+          translateY: 0,
+          scrollLeft: 0,
+          scrollTop: 0
+        },
+        graph: { cells: [] },
+        summary: { nodeCount: 0, edgeCount: 0 }
+      }
     }, token);
     assert.equal(response.status, 200);
     assert.equal(response.body.data.revision, 1);
     assert.ok(response.body.data.savedAt);
+    assert.equal(response.body.data.canvasData.version, 1);
+    assert.ok(Array.isArray(response.body.data.canvasData.graph.cells));
 
     response = await request("PUT", `/api/v1/projects/${projectId}/canvas`, {
       revision: 0,
-      canvasData: { schemaVersion: 1, nodes: [], edges: [], viewport: { x: 0, y: 0, zoom: 1 } }
+      canvasData: {
+        version: 1,
+        graph: { cells: [] },
+        summary: { nodeCount: 0, edgeCount: 0 }
+      }
     }, token);
     assert.equal(response.status, 409);
     assert.equal(response.body.code, "CANVAS_REVISION_CONFLICT");
