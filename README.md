@@ -27,20 +27,53 @@ npm start
 
 ## Vercel Deploy
 
-在 Vercel 导入仓库时，Root Directory 必须选择 `nodejs`。
+在 Vercel 导入仓库时，Root Directory 必须选择 `nodejs`（或本仓库根目录，视 monorepo 结构而定）。
 
-推荐配置：
+### 推荐项目设置
 
-- Framework Preset: `Other`
-- Build Command: `npm run vercel-build`
-- Output Directory: 留空
-- Node.js Version: `22.x`
-- 环境变量参考：`.env.vercel.example`
+| 配置项 | 值 |
+|--------|-----|
+| Framework Preset | `Other` |
+| Build Command | `npm run build`（自动按 `VERCEL_ENV` 选 profile） |
+| Output Directory | 留空 |
+| Node.js Version | `22.x` |
+| Production Branch | `main` |
+
+### test / prod 环境区分
+
+构建脚本 `scripts/vercel-build.mjs` 会按以下规则选择 `DAONE_PROFILE`：
+
+| 场景 | `VERCEL_ENV` | profile | 配置文件 |
+|------|--------------|---------|----------|
+| `main` 分支生产部署 | `production` | `prod` | `config/application.prod.env` + Vercel Production 环境变量 |
+| `test` 分支 / PR 预览部署 | `preview` | `test` | `config/application.test.env` + Vercel Preview 环境变量 |
+| 本地显式指定 | — | 由 `DAONE_PROFILE` 决定 | — |
+
+也可在本地或 CI 中显式执行：
+
+```bash
+npm run build:test   # 强制 test profile
+npm run build:prod   # 强制 prod profile
+```
+
+### 域名与分支建议（单项目）
+
+- `main` → Production → `api.daoneai.com`
+- `test` → Preview（可绑定 `api-test.daoneai.com`）
+
+在 Vercel **Settings → Domains** 将 `api-test.daoneai.com` 绑定到 `test` 分支的 Preview 部署。
+
+### 环境变量
+
+- 非敏感默认值：`config/application.{local,test,prod}.env`
+- 敏感配置：Vercel 控制台按 **Production / Preview** 分别配置（推荐），或本地 `.env.{profile}.local`
+- Preview 与 Production 应使用**不同的** Postgres、Redis 等中间件实例
 
 部署后接口前缀：
 
 ```text
-https://你的域名.vercel.app/api/v1
+https://api.daoneai.com/api/v1          # 生产
+https://api-test.daoneai.com/api/v1     # 测试
 ```
 
 ## Environment Profiles

@@ -1,5 +1,15 @@
 import { existsSync, readFileSync } from "node:fs";
 
+function resolveBuildProfile() {
+  if (process.env.DAONE_PROFILE) return process.env.DAONE_PROFILE;
+  if (process.env.VERCEL_ENV === "production") return "prod";
+  if (process.env.VERCEL_ENV === "preview" || process.env.VERCEL_ENV === "development") return "test";
+  return "test";
+}
+
+const buildProfile = resolveBuildProfile();
+process.env.DAONE_PROFILE = buildProfile;
+
 const { configHealth } = await import("../src/infrastructure/config/env.js");
 const health = configHealth();
 
@@ -10,12 +20,15 @@ const required = [
   "package.json",
   "src/starter/app.js",
   "src/infrastructure/config/env.js",
-  ".env.development.local",
-  ".env.test.local",
-  ".env.prod.local",
+  `config/application.${buildProfile}.env`,
   "public/index.html",
   "vercel.json"
 ];
+
+// 本地构建需有对应 profile 的 secrets 文件；Vercel 上由控制台环境变量注入
+if (!process.env.VERCEL) {
+  required.push(".env.development.local", `.env.${buildProfile}.local`);
+}
 for (const file of required) {
   if (!existsSync(file)) {
     throw new Error(`Missing required deploy file: ${file}`);

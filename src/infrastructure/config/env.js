@@ -7,6 +7,7 @@ const profile = resolveProfile();
 
 loadEnvFile(path.join(projectRoot, "config", `application.${profile}.env`));
 loadEnvFile(path.join(projectRoot, `.env.${profile}`));
+loadEnvFile(path.join(projectRoot, `.env.${profile}.local`));
 loadEnvFile(path.join(projectRoot, ".env"));
 
 const localModelProviderConfig = isLocal() ? readLocalJson(path.join(projectRoot, "config", "model-provider.local.json")) : {};
