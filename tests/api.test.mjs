@@ -327,6 +327,54 @@ describe("Daone Vercel Node API", () => {
     assert.match(response.rawBody, /SwaggerUIBundle/);
     assert.match(response.rawBody, /\/api\/v3\/swagger/);
   });
+
+  it("returns monotonic project ids and restores sequence from runtime snapshot", async () => {
+    const { exportStoreSnapshot, importStoreSnapshot } = await import("../src/infrastructure/db/memoryStore.js");
+    const { setSequence } = await import("../src/infrastructure/common/id.js");
+
+    let response = await request("POST", "/api/v1/auth/sms-codes", {
+      phone: "13800138002",
+      scene: "LOGIN"
+    });
+    assert.equal(response.status, 200);
+
+    response = await request("POST", "/api/v1/auth/sms-login", {
+      phone: "13800138002",
+      code: "123456"
+    });
+    assert.equal(response.status, 200);
+    const token = response.body.data.token;
+
+    response = await request("POST", "/api/v1/projects", { title: "项目 A" }, token);
+    assert.equal(response.status, 200);
+    const firstProjectId = BigInt(response.body.data.id);
+
+    response = await request("POST", "/api/v1/projects", { title: "项目 B" }, token);
+    assert.equal(response.status, 200);
+    const secondProjectId = BigInt(response.body.data.id);
+    assert.equal(secondProjectId, firstProjectId + 1n);
+
+    const snapshot = exportStoreSnapshot();
+    assert.ok(snapshot._sequence);
+    assert.equal(BigInt(snapshot._sequence), secondProjectId);
+
+    setSequence(1000n);
+    importStoreSnapshot(snapshot);
+
+    response = await request("POST", "/api/v1/projects", { title: "项目 C" }, token);
+    assert.equal(response.status, 200);
+    const thirdProjectId = BigInt(response.body.data.id);
+    assert.ok(thirdProjectId > secondProjectId);
+
+    const legacySnapshot = { ...snapshot };
+    delete legacySnapshot._sequence;
+    setSequence(1000n);
+    importStoreSnapshot(legacySnapshot);
+
+    response = await request("POST", "/api/v1/projects", { title: "项目 D" }, token);
+    assert.equal(response.status, 200);
+    assert.ok(BigInt(response.body.data.id) > thirdProjectId);
+  });
 });
 
 async function request(method, path, body = null, token = null, extraHeaders = {}) {

@@ -1,4 +1,4 @@
-import { nextId } from "../common/id.js";
+import { getSequence, nextId, setSequence, syncSequenceFromIds } from "../common/id.js";
 
 const now = () => new Date().toISOString();
 
@@ -34,7 +34,9 @@ globalThis.__DAONE_STORE__ = store;
 seed();
 
 export function exportStoreSnapshot() {
-  const snapshot = {};
+  const snapshot = {
+    _sequence: getSequence().toString()
+  };
   for (const [key, value] of Object.entries(store)) {
     if (value instanceof Map) {
       snapshot[key] = { type: "Map", entries: [...value.entries()] };
@@ -50,6 +52,9 @@ export function importStoreSnapshot(snapshot) {
     return;
   }
   for (const [key, value] of Object.entries(snapshot)) {
+    if (key === "_sequence") {
+      continue;
+    }
     if (!(key in store) || !value || typeof value !== "object") {
       continue;
     }
@@ -66,7 +71,52 @@ export function importStoreSnapshot(snapshot) {
       }
     }
   }
+  if (snapshot._sequence) {
+    setSequence(snapshot._sequence);
+  }
+  syncSequenceFromStore();
   seed();
+}
+
+const ID_MAP_KEYS = [
+  "users",
+  "projects",
+  "versions",
+  "shares",
+  "assets",
+  "generationTasks",
+  "chatSessions",
+  "chatMessages",
+  "workflows",
+  "orders",
+  "transactions",
+  "subscriptions",
+  "uploadTickets",
+  "inspirations",
+  "plans",
+  "models",
+  "promptTemplates",
+  "prices"
+];
+
+function syncSequenceFromStore() {
+  const ids = [];
+  for (const key of ID_MAP_KEYS) {
+    const map = store[key];
+    if (!(map instanceof Map)) {
+      continue;
+    }
+    for (const [entryKey, entryValue] of map.entries()) {
+      ids.push(entryKey);
+      if (entryValue?.id !== undefined && entryValue?.id !== null) {
+        ids.push(entryValue.id);
+      }
+    }
+  }
+  for (const projectId of store.canvases.keys()) {
+    ids.push(projectId);
+  }
+  syncSequenceFromIds(ids);
 }
 
 function seed() {
