@@ -375,6 +375,50 @@ describe("Daone Vercel Node API", () => {
     assert.equal(response.status, 200);
     assert.ok(BigInt(response.body.data.id) > thirdProjectId);
   });
+
+  it("keeps project id stable when patching title and canvas meta", async () => {
+    let response = await request("POST", "/api/v1/auth/sms-codes", {
+      phone: "13800138005",
+      scene: "LOGIN"
+    });
+    assert.equal(response.status, 200);
+
+    response = await request("POST", "/api/v1/auth/sms-login", {
+      phone: "13800138005",
+      code: "123456"
+    });
+    assert.equal(response.status, 200);
+    const token = response.body.data.token;
+
+    response = await request("POST", "/api/v1/projects", { title: "原始名称" }, token);
+    assert.equal(response.status, 200);
+    const projectId = response.body.data.id;
+
+    response = await request("PUT", `/api/v1/projects/${projectId}/canvas`, {
+      revision: 0,
+      canvasData: {
+        version: 1,
+        meta: {
+          projectId: "WRONG_ID",
+          projectName: "原始名称"
+        },
+        graph: { cells: [] },
+        summary: { nodeCount: 0, edgeCount: 0 }
+      }
+    }, token);
+    assert.equal(response.status, 200);
+    assert.equal(response.body.data.canvasData.meta.projectId, projectId);
+
+    response = await request("PATCH", `/api/v1/projects/${projectId}`, { title: "新名称" }, token);
+    assert.equal(response.status, 200);
+    assert.equal(response.body.data.id, projectId);
+    assert.equal(response.body.data.title, "新名称");
+
+    response = await request("GET", `/api/v1/projects/${projectId}/canvas`, null, token);
+    assert.equal(response.status, 200);
+    assert.equal(response.body.data.canvasData.meta.projectId, projectId);
+    assert.equal(response.body.data.canvasData.meta.projectName, "新名称");
+  });
 });
 
 async function request(method, path, body = null, token = null, extraHeaders = {}) {

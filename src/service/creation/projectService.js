@@ -30,9 +30,10 @@ const emptyCanvas = (projectId = "", projectName = "未命名创作") => ({
 
 export function createProject(userId, title = "未命名创作") {
   const id = nextId();
+  const normalizedId = String(id);
   const t = new Date().toISOString();
   const project = {
-    id,
+    id: normalizedId,
     userId,
     title: title || "未命名创作",
     coverAssetId: null,
@@ -40,10 +41,10 @@ export function createProject(userId, title = "未命名创作") {
     createdAt: t,
     updatedAt: t
   };
-  store.projects.set(id, project);
-  store.canvases.set(id, {
-    projectId: id,
-    canvas: emptyCanvas(id, title),
+  store.projects.set(normalizedId, project);
+  store.canvases.set(normalizedId, {
+    projectId: normalizedId,
+    canvas: emptyCanvas(normalizedId, title),
     revision: 0,
     updatedAt: t
   });
@@ -63,8 +64,12 @@ export function getProject(userId, projectId) {
 }
 
 export function updateProject(userId, projectId, body) {
-  const project = requireProject(userId, projectId);
-  if (body.title !== undefined) project.title = body.title;
+  const normalizedId = String(projectId);
+  const project = requireProject(userId, normalizedId);
+  if (body.title !== undefined) {
+    project.title = body.title;
+    syncCanvasMeta(normalizedId, body.title);
+  }
   if (body.coverAssetId !== undefined) {
     project.coverAssetId = body.coverAssetId === null ? null : assertAccessibleAsset(userId, body.coverAssetId).id;
   }
@@ -157,10 +162,11 @@ export function requireProject(userId, projectId) {
 }
 
 function toProjectView(project) {
-  const canvas = store.canvases.get(project.id);
+  const id = String(project.id);
+  const canvas = store.canvases.get(id);
   const cover = project.coverAssetId ? store.assets.get(String(project.coverAssetId)) : null;
   return {
-    id: project.id,
+    id,
     title: project.title,
     coverAssetId: project.coverAssetId,
     coverUrl: cover?.previewUrl || null,
@@ -248,7 +254,10 @@ function buildSnapshotFromGraph(graph, projectId, project, existingCanvas = null
   return {
     version: 1,
     savedAt: new Date().toISOString(),
-    meta: existing?.meta ?? defaultMeta(projectId, project?.title),
+    meta: {
+      ...(existing?.meta ?? defaultMeta(projectId, project?.title)),
+      projectId: String(projectId)
+    },
     viewport: existing?.viewport ?? defaultViewport(),
     graph,
     summary: summarizeGraph(graph)
@@ -282,14 +291,15 @@ function convertLegacyToSnapshot(legacy, projectId, project) {
 
 function normalizeCanvasPayload(raw, projectId, project, existingCanvas = null) {
   if (!raw || typeof raw !== "object") return null;
+  const normalizedProjectId = String(projectId);
   if (isCanvasSnapshot(raw)) {
     return {
       version: 1,
       savedAt: raw.savedAt || new Date().toISOString(),
       meta: {
-        ...defaultMeta(projectId, project?.title),
+        ...defaultMeta(normalizedProjectId, project?.title),
         ...(raw.meta || {}),
-        projectId: String(raw.meta?.projectId ?? projectId)
+        projectId: normalizedProjectId
       },
       viewport: {
         ...defaultViewport(),
@@ -300,10 +310,23 @@ function normalizeCanvasPayload(raw, projectId, project, existingCanvas = null) 
     };
   }
   if (isX6GraphData(raw)) {
-    return buildSnapshotFromGraph(raw, projectId, project, existingCanvas);
+    return buildSnapshotFromGraph(raw, normalizedProjectId, project, existingCanvas);
   }
   if (isLegacyCanvas(raw)) {
-    return convertLegacyToSnapshot(raw, projectId, project);
+    return convertLegacyToSnapshot(raw, normalizedProjectId, project);
   }
   return null;
+}
+
+function syncCanvasMeta(projectId, projectName) {
+  const canvas = store.canvases.get(String(projectId));
+  if (!canvas?.canvas) {
+    return;
+  }
+  canvas.canvas.meta = {
+    ...defaultMeta(projectId, projectName),
+    ...(canvas.canvas.meta || {}),
+    projectId: String(projectId),
+    projectName: projectName || canvas.canvas.meta?.projectName || "未命名创作"
+  };
 }
