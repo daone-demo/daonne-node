@@ -9,6 +9,8 @@ loadEnvFile(path.join(projectRoot, "config", `application.${profile}.env`));
 loadEnvFile(path.join(projectRoot, `.env.${profile}`));
 loadEnvFile(path.join(projectRoot, ".env"));
 
+const localModelProviderConfig = isLocal() ? readLocalJson(path.join(projectRoot, "config", "model-provider.local.json")) : {};
+
 export const appConfig = {
   profile,
   frontendBaseUrl: env("DAONE_FRONTEND_BASE_URL", "http://localhost:3000"),
@@ -65,8 +67,24 @@ export const appConfig = {
   },
   model: {
     mockEnabled: boolEnv("DAONE_MODEL_MOCK_ENABLED", isLocal()),
-    endpoint: env("MODEL_ENDPOINT", ""),
-    apiKey: env("MODEL_API_KEY", "")
+    endpoint: modelProviderValue("endpoint", env("MODEL_ENDPOINT", "")),
+    apiKey: modelProviderValue("apiKey", env("MODEL_API_KEY", "")),
+    openaiBaseUrl: modelProviderValue("openaiBaseUrl", env("MODEL_OPENAI_BASE_URL", env("MODEL_ENDPOINT", "https://api.302.ai"))),
+    defaultChatModel: modelProviderValue("defaultChatModel", env("MODEL_DEFAULT_CHAT_MODEL", "gpt-5.5")),
+    defaultCodexModel: modelProviderValue("defaultCodexModel", env("MODEL_DEFAULT_CODEX_MODEL", "gpt-5.5")),
+    defaultImageModel: modelProviderValue("defaultImageModel", env("MODEL_DEFAULT_IMAGE_MODEL", "gpt-image-2")),
+    toolsBaseUrl: modelProviderValue("toolsBaseUrl", env("MODEL_TOOLS_BASE_URL", env("MODEL_OPENAI_BASE_URL", env("MODEL_ENDPOINT", "https://api.302.ai")))),
+    tools: {
+      removeBackground: modelProviderToolValue("removeBackground", env("MODEL_TOOL_REMOVE_BACKGROUND_PATH", "")),
+      eraser: modelProviderToolValue("eraser", env("MODEL_TOOL_ERASER_PATH", "")),
+      expandImage: modelProviderToolValue("expandImage", env("MODEL_TOOL_EXPAND_IMAGE_PATH", "")),
+      increaseResolution: modelProviderToolValue("increaseResolution", env("MODEL_TOOL_INCREASE_RESOLUTION_PATH", "")),
+      imageTo3d: modelProviderToolValue("imageTo3d", env("MODEL_TOOL_IMAGE_TO_3D_PATH", "")),
+      promptExpert: modelProviderToolValue("promptExpert", env("MODEL_TOOL_PROMPT_EXPERT_PATH", "")),
+      productImageReplacement: modelProviderToolValue("productImageReplacement", env("MODEL_TOOL_PRODUCT_IMAGE_REPLACEMENT_PATH", "")),
+      poseTransfer: modelProviderToolValue("poseTransfer", env("MODEL_TOOL_POSE_TRANSFER_PATH", "")),
+      topazEnhance: modelProviderToolValue("topazEnhance", env("MODEL_TOOL_TOPAZ_ENHANCE_PATH", ""))
+    }
   },
   contentSafety: {
     mockEnabled: boolEnv("DAONE_CONTENT_SAFETY_MOCK_ENABLED", isLocal()),
@@ -175,7 +193,8 @@ function missingRequiredConfig() {
   }
 
   if (!appConfig.model.mockEnabled) {
-    requireKeys(missing, ["MODEL_ENDPOINT", "MODEL_API_KEY"]);
+    requireKeys(missing, ["MODEL_API_KEY"]);
+    requireOneOf(missing, ["MODEL_OPENAI_BASE_URL", "MODEL_ENDPOINT"]);
   }
 
   if (!appConfig.contentSafety.mockEnabled) {
@@ -253,6 +272,24 @@ function loadEnvFile(filePath) {
       process.env[key] = value;
     }
   }
+}
+
+function readLocalJson(filePath) {
+  if (!existsSync(filePath)) return {};
+  try {
+    return JSON.parse(readFileSync(filePath, "utf8"));
+  } catch (error) {
+    throw new Error(`Invalid local config JSON: ${filePath}. ${error.message}`);
+  }
+}
+
+function modelProviderValue(key, fallback) {
+  return localModelProviderConfig[key] === undefined || localModelProviderConfig[key] === "" ? fallback : localModelProviderConfig[key];
+}
+
+function modelProviderToolValue(key, fallback) {
+  const tools = localModelProviderConfig.tools || {};
+  return tools[key] === undefined || tools[key] === "" ? fallback : tools[key];
 }
 
 function env(key, fallback) {

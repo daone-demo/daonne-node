@@ -3,6 +3,7 @@ node_modules/
 .env.local
 .env.test
 .env.prod
+config/model-provider.local.json
 .vercel/
 coverage/
 npm-debug.log*

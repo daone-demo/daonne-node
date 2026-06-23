@@ -187,15 +187,18 @@ describe("Daone Vercel Node API", () => {
 
     response = await request("GET", `/api/v1/assets?scope=FILES&projectId=${projectId}`, null, token);
     assert.equal(response.status, 200);
-    assert.equal(response.body.data.items.length, 3);
+    assert.equal(response.body.data.records.length, 3);
+    assert.equal(response.body.data.items, undefined);
 
     response = await request("GET", "/api/v1/assets?scope=CENTER", null, token);
     assert.equal(response.status, 200);
-    assert.ok(response.body.data.items.length >= 1);
+    assert.ok(response.body.data.records.length >= 1);
+    assert.equal(response.body.data.items, undefined);
 
     response = await request("GET", `/api/v1/assets?scope=CENTER&projectId=${projectId}`, null, token);
     assert.equal(response.status, 200);
-    assert.ok(response.body.data.items.length >= 1);
+    assert.ok(response.body.data.records.length >= 1);
+    assert.equal(response.body.data.items, undefined);
 
     response = await request("POST", "/api/v1/generation-tasks", {
       projectId,
@@ -205,6 +208,58 @@ describe("Daone Vercel Node API", () => {
     }, token, { "Idempotency-Key": "task-expensive" });
     assert.equal(response.status, 400);
     assert.equal(response.body.code, "POINTS_NOT_ENOUGH");
+
+    response = await request("POST", "/api/v1/provider/chat/completions", {
+      model: "gpt5.5",
+      messages: [{ role: "user", content: "hello" }]
+    }, token);
+    assert.equal(response.status, 200);
+    assert.equal(response.body.object, "chat.completion");
+    assert.equal(response.body.model, "gpt-5.5");
+    assert.equal(response.body.choices[0].message.role, "assistant");
+    assert.equal(response.body.traceId, undefined);
+    assert.equal(response.body.code, undefined);
+    assert.equal(response.body.data, undefined);
+
+    response = await request("POST", "/api/v1/provider/chat/completions", {
+      model: "Codex",
+      messages: [{ role: "user", content: "hello" }],
+      stream: true
+    }, token);
+    assert.equal(response.status, 200);
+    assert.match(response.headers["content-type"], /text\/event-stream/);
+    assert.match(response.rawBody, /chat\.completion\.chunk/);
+    assert.match(response.rawBody, /^data: /);
+    assert.match(response.rawBody, /data: \[DONE\]\n\n$/);
+
+    response = await request("POST", "/api/v1/provider/images/generations", {
+      model: "image2.0",
+      prompt: "white sneaker",
+      n: 1
+    }, token);
+    assert.equal(response.status, 200);
+    assert.equal(response.body.data.length, 1);
+    assert.equal(response.body.traceId, undefined);
+
+    response = await request("POST", "/api/v1/provider/images/generations", {
+      model: "Nanobanana 2.0",
+      prompt: "white sneaker",
+      stream: true
+    }, token);
+    assert.equal(response.status, 200);
+    assert.match(response.headers["content-type"], /text\/event-stream/);
+    assert.match(response.rawBody, /^data: /);
+    assert.match(response.rawBody, /data: \[DONE\]\n\n$/);
+
+    response = await request("GET", "/api/v1/provider/tools", null, token);
+    assert.equal(response.status, 200);
+    assert.ok(response.body.data.items.some((item) => item.code === "remove-background"));
+
+    response = await request("POST", "/api/v1/provider/tools/remove-background", {
+      imageUrl: "https://example.com/a.png"
+    }, token);
+    assert.equal(response.status, 200);
+    assert.equal(response.body.status, "SUCCEEDED");
 
     response = await request("GET", "/api/v1/plans", null, token);
     assert.equal(response.status, 200);

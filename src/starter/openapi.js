@@ -116,6 +116,25 @@ export function openApiSpec() {
           }, "生成参数"),
           assetIds: array(string("100000000000000002"), "参考素材 ID")
         }, "创建生成任务请求", ["projectId", "capabilityCode", "prompt"]),
+        ProviderChatCompletionRequest: object({
+          model: string("gpt5.5", "模型别名或 302.AI 模型名"),
+          messages: array(object({
+            role: string("user", "消息角色"),
+            content: string("帮我生成商品图提示词", "消息内容")
+          }, "聊天消息"), "OpenAI Chat Completions messages"),
+          stream: boolean(true, "是否使用 ChatGPT/OpenAI SSE 流式响应")
+        }, "模型网关聊天请求", ["messages"]),
+        ProviderImageGenerationRequest: object({
+          model: string("image2.0", "图片模型别名或 302.AI 模型名"),
+          prompt: string("白底运动鞋商品主图", "图片提示词"),
+          n: integer(1, "生成数量"),
+          size: string("1024x1024", "图片尺寸"),
+          stream: boolean(false, "是否透传图片生成 SSE")
+        }, "模型网关图片生成请求", ["prompt"]),
+        ProviderToolRequest: object({
+          imageUrl: string("https://example.com/input.png", "工具输入图片 URL"),
+          parameters: object({}, "工具参数，按 302.AI 对应工具文档传递")
+        }, "模型网关工具请求"),
         ChatSessionCreateRequest: object({
           projectId: string("100000000000000001", "项目 ID，可选"),
           title: string("新的对话", "对话标题")
@@ -236,6 +255,10 @@ export function openApiSpec() {
       "/v1/generation-tasks": { get: op("任务列表", { query: [queryParam("projectId", "项目 ID"), queryParam("status", "任务状态"), ...pageParams()] }), post: op("创建任务", { headers: [headerParam("Idempotency-Key", "幂等键，建议创建任务时传入")], body: "GenerationTaskCreateRequest" }) },
       "/v1/generation-tasks/{taskId}": { get: op("任务详情", { params: [pathParam("taskId", "生成任务 ID")] }) },
       "/v1/generation-tasks/{taskId}/cancel": { post: op("取消任务", { params: [pathParam("taskId", "生成任务 ID")] }) },
+      "/v1/provider/chat/completions": { post: op("302.AI 聊天模型网关，支持 ChatGPT/OpenAI SSE", { body: "ProviderChatCompletionRequest" }) },
+      "/v1/provider/images/generations": { post: op("302.AI 图片生成模型网关", { body: "ProviderImageGenerationRequest" }) },
+      "/v1/provider/tools": { get: op("模型小工具白名单") },
+      "/v1/provider/tools/{toolCode}": { post: op("302.AI 小工具网关", { params: [pathParam("toolCode", "工具编码")], body: "ProviderToolRequest" }) },
       "/v1/chat-sessions": { get: op("对话列表", { query: [queryParam("projectId", "项目 ID"), ...pageParams()] }), post: op("创建对话", { body: "ChatSessionCreateRequest" }) },
       "/v1/chat-sessions/{sessionId}": { delete: op("删除对话", { params: [pathParam("sessionId", "对话 ID")] }) },
       "/v1/chat-sessions/{sessionId}/messages": { get: op("对话消息列表", { params: [pathParam("sessionId", "对话 ID")], query: pageParams() }), post: op("发送对话消息", { params: [pathParam("sessionId", "对话 ID")], body: "ChatMessageCreateRequest" }) },

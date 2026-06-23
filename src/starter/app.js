@@ -15,6 +15,7 @@ import * as billingService from "../service/billing/billingService.js";
 import * as trialService from "../service/billing/trialService.js";
 import * as homeService from "../service/home/homeService.js";
 import * as adminService from "../service/operation/adminService.js";
+import * as modelClient from "../infrastructure/middleware/modelClient.js";
 import { docsHtml, openApiSpec } from "./openapi.js";
 import { hydrateRuntimeStore, persistRuntimeStore, runtimeStoreHealth } from "../infrastructure/middleware/runtimeStore.js";
 
@@ -67,7 +68,7 @@ router.post("/api/mock-files/upload", async () => {
   return { uploaded: true };
 }, { public: true });
 router.post("/api/v1/assets", async ({ user, body }) => assetService.completeUpload(user.id, body));
-router.get("/api/v1/assets", async ({ user, url }) => page(assetService.listAssets(user.id, Object.fromEntries(url.searchParams)), url));
+router.get("/api/v1/assets", async ({ user, url }) => recordsOnlyPage(assetService.listAssets(user.id, Object.fromEntries(url.searchParams)), url));
 router.get("/api/v1/assets/:assetId", async ({ user, params }) => assetService.getAsset(user.id, params.assetId));
 router.put("/api/v1/assets/:assetId/favorite", async ({ user, params }) => assetService.favoriteAsset(user.id, params.assetId));
 router.delete("/api/v1/assets/:assetId/favorite", async ({ user, params }) => {
@@ -87,6 +88,20 @@ router.post("/api/v1/generation-tasks", async ({ user, body, req }) => aiService
 router.get("/api/v1/generation-tasks", async ({ user, url }) => page(aiService.listTasks(user.id, Object.fromEntries(url.searchParams)), url));
 router.get("/api/v1/generation-tasks/:taskId", async ({ user, params }) => aiService.getTask(user.id, params.taskId));
 router.post("/api/v1/generation-tasks/:taskId/cancel", async ({ user, params }) => aiService.cancelTask(user.id, params.taskId));
+router.post("/api/v1/provider/chat/completions", async ({ body }) => {
+  if (body.stream) {
+    return providerStream(await modelClient.createChatCompletionStream(body));
+  }
+  return rawJson(await modelClient.createChatCompletion(body));
+});
+router.post("/api/v1/provider/images/generations", async ({ body }) => {
+  if (body.stream) {
+    return providerStream(await modelClient.createImageGenerationStream(body));
+  }
+  return rawJson(await modelClient.createImageGeneration(body));
+});
+router.get("/api/v1/provider/tools", async () => ({ items: modelClient.supportedModelTools() }));
+router.post("/api/v1/provider/tools/:toolCode", async ({ params, body }) => rawJson(await modelClient.callModelTool(params.toolCode, body)));
 
 router.post("/api/v1/chat-sessions", async ({ user, body }) => chatService.createSession(user.id, body));
 router.get("/api/v1/chat-sessions", async ({ user, url }) => page(chatService.sessions(user.id, url.searchParams.get("projectId")), url));
@@ -202,6 +217,14 @@ export async function handleRequest(req, res) {
       sendNoContent(res, trace);
       return;
     }
+    if (result?.__providerStream) {
+      await sendProviderStream(res, result.response, trace);
+      return;
+    }
+    if (result?.__rawJson) {
+      sendRawJson(res, 200, result.data, trace);
+      return;
+    }
     if (matched.options.rawSuccess) {
       sendJson(res, 200, result, trace);
       return;
@@ -218,6 +241,12 @@ function page(items, url) {
   return pageResponse(records, current, pageSize, total);
 }
 
+function recordsOnlyPage(items, url) {
+  const response = page(items, url);
+  delete response.items;
+  return response;
+}
+
 function bearerToken(req) {
   const value = req.headers.authorization || "";
   return value.startsWith("Bearer ") ? value.slice(7) : null;
@@ -229,7 +258,7 @@ function cors(req, res) {
   const allowOrigin = allowed.includes("*") || allowed.includes(origin) ? origin : allowed[0];
   res.setHeader("access-control-allow-origin", allowOrigin || "*");
   res.setHeader("access-control-allow-methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
-  res.setHeader("access-control-allow-headers", "Content-Type,Authorization,Idempotency-Key,X-Daone-Payment-Signature");
+  res.setHeader("access-control-allow-headers", "Content-Type,Authorization,Accept,Idempotency-Key,X-Daone-Payment-Signature");
   res.setHeader("access-control-expose-headers", "X-Trace-Id");
 }
 
@@ -239,6 +268,45 @@ function html(value) {
 
 function noContent() {
   return { __noContent: true };
+}
+
+function providerStream(response) {
+  return { __providerStream: true, response };
+}
+
+function rawJson(data) {
+  return { __rawJson: true, data };
+}
+
+function sendRawJson(res, status, payload, trace) {
+  res.statusCode = status;
+  res.setHeader("content-type", "application/json; charset=utf-8");
+  res.setHeader("x-trace-id", trace);
+  res.end(JSON.stringify(payload));
+}
+
+async function sendProviderStream(res, response, trace) {
+  res.statusCode = response.status || 200;
+  res.setHeader("content-type", response.headers?.get?.("content-type") || "text/event-stream; charset=utf-8");
+  res.setHeader("cache-control", "no-cache, no-transform");
+  res.setHeader("connection", "keep-alive");
+  res.setHeader("x-trace-id", trace);
+  if (!response.body) {
+    res.end();
+    return;
+  }
+  const reader = response.body.getReader();
+  const chunks = [];
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (typeof res.write === "function") {
+      res.write(Buffer.from(value));
+    } else {
+      chunks.push(Buffer.from(value));
+    }
+  }
+  res.end(chunks.length ? Buffer.concat(chunks) : undefined);
 }
 
 function isOperationalRoute(pathname) {

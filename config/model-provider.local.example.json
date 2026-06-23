@@ -1,0 +1,19 @@
+{
+  "apiKey": "sk-***",
+  "openaiBaseUrl": "https://api.302.ai",
+  "defaultChatModel": "gpt-5.5",
+  "defaultCodexModel": "gpt-5.5",
+  "defaultImageModel": "gpt-image-2",
+  "toolsBaseUrl": "https://api.302.ai",
+  "tools": {
+    "removeBackground": "",
+    "eraser": "",
+    "expandImage": "",
+    "increaseResolution": "",
+    "imageTo3d": "",
+    "promptExpert": "",
+    "productImageReplacement": "",
+    "poseTransfer": "",
+    "topazEnhance": ""
+  }
+}
