@@ -4,7 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "DAONE_PROFILE=test npm run vercel-build",
+    "build": "npm run build:test",
+    "build:dev": "DAONE_PROFILE=local npm run vercel-build",
+    "build:test": "DAONE_PROFILE=test npm run vercel-build",
+    "build:prod": "DAONE_PROFILE=prod npm run vercel-build",
     "config:local": "node scripts/config-check.mjs local",
     "config:test": "node scripts/config-check.mjs test",
     "config:prod": "node scripts/config-check.mjs prod",
