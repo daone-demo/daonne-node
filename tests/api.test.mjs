@@ -43,6 +43,7 @@ describe("Daone Vercel Node API", () => {
     assert.equal(response.body.data.user.phone, "13800138000");
     assert.equal(response.body.data.user.role, "ADMIN");
     assert.ok(response.body.data.token.startsWith("dn_"));
+    assert.equal(response.body.data.accessToken, response.body.data.token);
 
     response = await request("POST", "/api/admin/v1/sms-codes", {
       phone: "13900139000",
@@ -58,6 +59,7 @@ describe("Daone Vercel Node API", () => {
     const token = response.body.data.token;
     const firstUserId = response.body.data.user.id;
     assert.ok(token.startsWith("dn_"));
+    assert.equal(response.body.data.accessToken, token);
 
     response = await request("POST", "/api/v1/auth/sms-codes", {
       phone: "13800138001",
@@ -251,6 +253,29 @@ describe("Daone Vercel Node API", () => {
     assert.match(response.rawBody, /^data: /);
     assert.match(response.rawBody, /data: \[DONE\]\n\n$/);
 
+    response = await request("POST", "/api/v1/provider/videos/generations", {
+      model: "seedance2.0",
+      prompt: "product video",
+      stream: false
+    }, token);
+    assert.equal(response.status, 200);
+    assert.equal(response.body.object, "video.generation");
+    assert.equal(response.body.model, "seedance2.0");
+    assert.equal(response.body.provider, "seedance");
+    assert.equal(response.body.traceId, undefined);
+
+    response = await request("POST", "/api/v1/provider/videos/generations", {
+      model: "happy-horse",
+      prompt: "product video",
+      stream: true
+    }, token);
+    assert.equal(response.status, 200);
+    assert.match(response.headers["content-type"], /text\/event-stream/);
+    assert.match(response.rawBody, /^data: /);
+    assert.match(response.rawBody, /video\.generation\.chunk/);
+    assert.match(response.rawBody, /"model":"happy-horse"/);
+    assert.match(response.rawBody, /data: \[DONE\]\n\n$/);
+
     response = await request("GET", "/api/v1/provider/tools", null, token);
     assert.equal(response.status, 200);
     assert.ok(response.body.data.items.some((item) => item.code === "remove-background"));
@@ -326,6 +351,16 @@ describe("Daone Vercel Node API", () => {
     assert.equal(response.status, 200);
     assert.ok(response.body.data.records.length >= 1);
 
+    response = await request("GET", "/api/admin/v1/dashboard", null, token);
+    assert.equal(response.status, 200);
+    assert.equal(typeof response.body.data.overview.totalUsers, "number");
+    assert.ok(Array.isArray(response.body.data.trends));
+
+    response = await request("GET", `/api/admin/v1/users/${firstUserId}`, null, token);
+    assert.equal(response.status, 200);
+    assert.equal(response.body.data.id, firstUserId);
+    assert.equal(typeof response.body.data.projectCount, "number");
+
     response = await request("POST", "/api/admin/v1/plans", {
       planCode: "PRO",
       planName: "专业版",
@@ -339,12 +374,33 @@ describe("Daone Vercel Node API", () => {
     assert.equal(response.status, 200);
     assert.equal(response.body.data.status, "DISABLED");
 
+    response = await request("POST", "/api/admin/v1/plans", {
+      planCode: "FRONT_FORM",
+      planName: "前端表单版",
+      benefitsText: "1000积分/月\n模板中心",
+      pricesText: JSON.stringify([{ priceCode: "FRONT_FORM_MONTH", cycleUnit: "MONTH", cycleCount: 1, priceFen: 4900, grantPoints: 1000 }])
+    }, token);
+    assert.equal(response.status, 200);
+    assert.equal(response.body.data.prices[0].priceCode, "FRONT_FORM_MONTH");
+
+    response = await request("PATCH", "/api/admin/v1/plans/FRONT_FORM/status", { status: "停用" }, token);
+    assert.equal(response.status, 200);
+    assert.equal(response.body.data.status, "DISABLED");
+
+    response = await request("GET", "/api/admin/v1/plans/PRO", null, token);
+    assert.equal(response.status, 200);
+    assert.equal(response.body.data.planCode, "PRO");
+
     response = await request("PUT", "/api/admin/v1/model-configs/IMAGE_GENERAL_V1", {
       basePoints: 25,
       parameters: { count: { min: 1, max: 4 } }
     }, token);
     assert.equal(response.status, 200);
     assert.equal(response.body.data.basePoints, 25);
+
+    response = await request("GET", "/api/admin/v1/model-configs/IMAGE_GENERAL_V1", null, token);
+    assert.equal(response.status, 200);
+    assert.equal(response.body.data.modelCode, "IMAGE_GENERAL_V1");
 
     response = await request("PATCH", "/api/admin/v1/model-configs/IMAGE_GENERAL_V1/status", { status: "ENABLED" }, token);
     assert.equal(response.status, 200);
@@ -364,6 +420,82 @@ describe("Daone Vercel Node API", () => {
     }, token);
     assert.equal(response.status, 200);
     assert.equal(response.body.data.name, "图片海报提示词 v2");
+
+    response = await request("PATCH", "/api/admin/v1/prompt-templates/IMAGE_POSTER/status", { status: "DISABLED" }, token);
+    assert.equal(response.status, 200);
+    assert.equal(response.body.data.status, "DISABLED");
+
+    response = await request("POST", "/api/admin/v1/categories", {
+      categoryCode: "ECOMMERCE",
+      categoryName: "电商营销",
+      scope: "ALL",
+      sortNo: 5
+    }, token);
+    assert.equal(response.status, 200);
+    assert.equal(response.body.data.categoryCode, "ECOMMERCE");
+
+    response = await request("PATCH", "/api/admin/v1/categories/ECOMMERCE/status", { status: "DISABLED" }, token);
+    assert.equal(response.status, 200);
+    assert.equal(response.body.data.status, "DISABLED");
+
+    response = await request("GET", "/api/admin/v1/categories", null, token);
+    assert.equal(response.status, 200);
+    assert.ok(response.body.data.records.some((item) => item.categoryCode === "ECOMMERCE"));
+
+    response = await request("POST", "/api/admin/v1/workflows", {
+      name: "后台测试工作流",
+      description: "后台接口测试",
+      categoryCode: "ECOMMERCE",
+      categoryName: "电商营销",
+      workflowData: { nodes: [{ id: "n1" }], edges: [] }
+    }, token);
+    assert.equal(response.status, 200);
+    assert.equal(response.body.data.nodeCount, 1);
+    const adminWorkflowId = response.body.data.id;
+
+    response = await request("PATCH", `/api/admin/v1/workflows/${adminWorkflowId}/status`, { status: "DISABLED" }, token);
+    assert.equal(response.status, 200);
+    assert.equal(response.body.data.status, "DISABLED");
+
+    response = await request("GET", `/api/admin/v1/workflows/${adminWorkflowId}`, null, token);
+    assert.equal(response.status, 200);
+    assert.equal(response.body.data.id, adminWorkflowId);
+
+    response = await request("POST", "/api/admin/v1/invoices", {
+      userId: firstUserId,
+      orderNo,
+      invoiceTitle: "测试公司",
+      taxNo: "913300000000000000",
+      invoiceType: "VAT_NORMAL",
+      amountFen: 9900
+    }, token);
+    assert.equal(response.status, 200);
+    assert.equal(response.body.data.invoiceTitle, "测试公司");
+    const invoiceId = response.body.data.id;
+
+    response = await request("PATCH", `/api/admin/v1/invoices/${invoiceId}/status`, { status: "ISSUED" }, token);
+    assert.equal(response.status, 200);
+    assert.equal(response.body.data.status, "ISSUED");
+    assert.ok(response.body.data.issuedAt);
+
+    response = await request("GET", `/api/admin/v1/orders/${orderNo}`, null, token);
+    assert.equal(response.status, 200);
+    assert.equal(response.body.data.orderNo, orderNo);
+    assert.ok(Array.isArray(response.body.data.transactions));
+
+    response = await request("POST", "/api/admin/v1/inspirations", {
+      title: "测试灵感",
+      categoryCode: "ECOMMERCE",
+      coverUrl: "https://example.com/cover.png",
+      prompt: "生成一张测试海报"
+    }, token);
+    assert.equal(response.status, 200);
+    assert.equal(response.body.data.prompt, "生成一张测试海报");
+    const inspirationId = response.body.data.id;
+
+    response = await request("PATCH", `/api/admin/v1/inspirations/${inspirationId}/status`, { status: "DISABLED" }, token);
+    assert.equal(response.status, 200);
+    assert.equal(response.body.data.status, "DISABLED");
 
     response = await request("DELETE", `/api/v1/projects/${projectId}/shares/${shareCode}`, null, token);
     assert.equal(response.status, 204);

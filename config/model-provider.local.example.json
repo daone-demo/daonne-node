@@ -5,6 +5,25 @@
   "defaultCodexModel": "gpt-5.5",
   "defaultImageModel": "gpt-image-2",
   "toolsBaseUrl": "https://api.302.ai",
+  "videos": {
+    "seedance": {
+      "apiKey": "your-seedance-api-key",
+      "baseUrl": "https://ark.cn-beijing.volces.com/api/v3",
+      "model": "ark-***",
+      "createPath": "/contents/generations/tasks",
+      "statusPath": "/contents/generations/tasks/{taskId}"
+    },
+    "happyHorse": {
+      "apiKey": "sk-ws-***",
+      "baseUrl": "https://queue.fal.run",
+      "model": "alibaba/happy-horse/text-to-video",
+      "textModel": "alibaba/happy-horse/text-to-video",
+      "imageModel": "alibaba/happy-horse/image-to-video",
+      "createPath": "/{model}",
+      "statusPath": "/{model}/requests/{taskId}/status",
+      "resultPath": "/{model}/requests/{taskId}"
+    }
+  },
   "tools": {
     "removeBackground": "",
     "eraser": "",

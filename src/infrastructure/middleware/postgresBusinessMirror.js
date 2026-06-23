@@ -110,15 +110,17 @@ async function mirrorUsers(client) {
 async function mirrorPlans(client) {
   for (const plan of store.plans.values()) {
     await client.query(
-      `INSERT INTO subscription_plan (id, plan_code, plan_name, description, benefits_json, status, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+      `INSERT INTO subscription_plan (id, plan_code, plan_name, description, benefits_json, status, created_at, updated_at, deleted, attributes)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
        ON CONFLICT (id) DO UPDATE SET
          plan_code = EXCLUDED.plan_code,
          plan_name = EXCLUDED.plan_name,
          description = EXCLUDED.description,
          benefits_json = EXCLUDED.benefits_json,
          status = EXCLUDED.status,
-         updated_at = EXCLUDED.updated_at`,
+         updated_at = EXCLUDED.updated_at,
+         deleted = EXCLUDED.deleted,
+         attributes = EXCLUDED.attributes`,
       [
         toBigInt(plan.id),
         plan.planCode,
@@ -127,7 +129,9 @@ async function mirrorPlans(client) {
         json(plan.benefits || []),
         plan.status || "ENABLED",
         timestamp(plan.createdAt),
-        timestamp(plan.updatedAt || plan.createdAt)
+        timestamp(plan.updatedAt || plan.createdAt),
+        boolean(plan.deleted),
+        json(plan.attributes || {})
       ]
     );
   }
@@ -166,8 +170,8 @@ async function mirrorPlans(client) {
 async function mirrorModels(client) {
   for (const model of store.models.values()) {
     await client.query(
-      `INSERT INTO model_config (id, model_code, model_name, task_type, base_points, parameters_json, status, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+      `INSERT INTO model_config (id, model_code, model_name, task_type, base_points, parameters_json, status, created_at, updated_at, deleted, attributes)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
        ON CONFLICT (id) DO UPDATE SET
          model_code = EXCLUDED.model_code,
          model_name = EXCLUDED.model_name,
@@ -175,7 +179,9 @@ async function mirrorModels(client) {
          base_points = EXCLUDED.base_points,
          parameters_json = EXCLUDED.parameters_json,
          status = EXCLUDED.status,
-         updated_at = EXCLUDED.updated_at`,
+         updated_at = EXCLUDED.updated_at,
+         deleted = EXCLUDED.deleted,
+         attributes = EXCLUDED.attributes`,
       [
         toBigInt(model.id),
         model.modelCode,
@@ -185,7 +191,9 @@ async function mirrorModels(client) {
         json(model.parameters || {}),
         model.status || "ENABLED",
         timestamp(model.createdAt),
-        timestamp(model.updatedAt || model.createdAt)
+        timestamp(model.updatedAt || model.createdAt),
+        boolean(model.deleted),
+        json(model.attributes || {})
       ]
     );
   }
@@ -194,8 +202,8 @@ async function mirrorModels(client) {
 async function mirrorInspirations(client) {
   for (const item of store.inspirations.values()) {
     await client.query(
-      `INSERT INTO inspiration (id, title, cover_url, category_code, author_name, author_avatar_url, like_count, view_count, sort_no, status, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+      `INSERT INTO inspiration (id, title, cover_url, category_code, author_name, author_avatar_url, like_count, view_count, sort_no, status, created_at, updated_at, prompt, deleted, attributes)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
        ON CONFLICT (id) DO UPDATE SET
          title = EXCLUDED.title,
          cover_url = EXCLUDED.cover_url,
@@ -206,7 +214,10 @@ async function mirrorInspirations(client) {
          view_count = EXCLUDED.view_count,
          sort_no = EXCLUDED.sort_no,
          status = EXCLUDED.status,
-         updated_at = EXCLUDED.updated_at`,
+         updated_at = EXCLUDED.updated_at,
+         prompt = EXCLUDED.prompt,
+         deleted = EXCLUDED.deleted,
+         attributes = EXCLUDED.attributes`,
       [
         toBigInt(item.id),
         item.title,
@@ -219,7 +230,10 @@ async function mirrorInspirations(client) {
         number(item.sortNo),
         item.status || "ENABLED",
         timestamp(item.createdAt),
-        timestamp(item.updatedAt || item.createdAt)
+        timestamp(item.updatedAt || item.createdAt),
+        nullable(item.prompt),
+        boolean(item.deleted),
+        json(item.attributes || {})
       ]
     );
   }
@@ -439,25 +453,27 @@ async function mirrorChat(client) {
 async function mirrorWorkflows(client) {
   for (const workflow of store.workflows.values()) {
     await client.query(
-      `INSERT INTO workflow (id, user_id, name, description, cover_asset_id, workflow_json, deleted, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+      `INSERT INTO workflow (id, user_id, name, description, cover_asset_id, workflow_json, deleted, created_at, updated_at, attributes)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
        ON CONFLICT (id) DO UPDATE SET
          name = EXCLUDED.name,
          description = EXCLUDED.description,
          cover_asset_id = EXCLUDED.cover_asset_id,
          workflow_json = EXCLUDED.workflow_json,
          deleted = EXCLUDED.deleted,
-         updated_at = EXCLUDED.updated_at`,
+         updated_at = EXCLUDED.updated_at,
+         attributes = EXCLUDED.attributes`,
       [
         toBigInt(workflow.id),
-        toBigInt(workflow.userId),
+        nullableBigInt(workflow.userId) || 0,
         workflow.name,
         nullable(workflow.description),
         nullableBigInt(workflow.coverAssetId),
         json(workflow.workflowData || {}),
         workflow.deleted ? 1 : 0,
         timestamp(workflow.createdAt),
-        timestamp(workflow.updatedAt || workflow.createdAt)
+        timestamp(workflow.updatedAt || workflow.createdAt),
+        json(workflow.attributes || {})
       ]
     );
   }
@@ -552,14 +568,16 @@ async function mirrorBilling(client) {
 async function mirrorAdminContent(client) {
   for (const template of store.promptTemplates.values()) {
     await client.query(
-      `INSERT INTO prompt_template (id, template_code, template_name, scene, content, status, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+      `INSERT INTO prompt_template (id, template_code, template_name, scene, content, status, created_at, updated_at, deleted, attributes)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
        ON CONFLICT (id) DO UPDATE SET
          template_name = EXCLUDED.template_name,
          scene = EXCLUDED.scene,
          content = EXCLUDED.content,
          status = EXCLUDED.status,
-         updated_at = EXCLUDED.updated_at`,
+         updated_at = EXCLUDED.updated_at,
+         deleted = EXCLUDED.deleted,
+         attributes = EXCLUDED.attributes`,
       [
         toBigInt(template.id),
         template.code,
@@ -568,7 +586,122 @@ async function mirrorAdminContent(client) {
         template.content,
         template.status || "ENABLED",
         timestamp(template.createdAt),
-        timestamp(template.updatedAt || template.createdAt)
+        timestamp(template.updatedAt || template.createdAt),
+        boolean(template.deleted),
+        json(template.attributes || {})
+      ]
+    );
+  }
+
+  for (const category of store.contentCategories.values()) {
+    await client.query(
+      `INSERT INTO content_category (id, category_code, category_name, scope, parent_code, sort_no, status, gmt_create, gmt_modified, deleted, attributes)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+       ON CONFLICT (id) DO UPDATE SET
+         category_code = EXCLUDED.category_code,
+         category_name = EXCLUDED.category_name,
+         scope = EXCLUDED.scope,
+         parent_code = EXCLUDED.parent_code,
+         sort_no = EXCLUDED.sort_no,
+         status = EXCLUDED.status,
+         gmt_modified = EXCLUDED.gmt_modified,
+         deleted = EXCLUDED.deleted,
+         attributes = EXCLUDED.attributes`,
+      [
+        toBigInt(category.id),
+        category.categoryCode,
+        category.categoryName,
+        category.scope || "ALL",
+        nullable(category.parentCode),
+        number(category.sortNo),
+        category.status || "ENABLED",
+        timestamp(category.createdAt),
+        timestamp(category.updatedAt || category.createdAt),
+        boolean(category.deleted),
+        json(category.attributes || {})
+      ]
+    );
+  }
+
+  for (const invoice of store.invoiceApplications.values()) {
+    await client.query(
+      `INSERT INTO invoice_application (id, invoice_no, user_id, order_no, invoice_title, tax_no, invoice_type, amount_fen, status, email, receiver_name, receiver_phone, receiver_address, reject_reason, issued_at, invoice_file_asset_id, express_company, express_no, gmt_create, gmt_modified, deleted, attributes)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
+       ON CONFLICT (id) DO UPDATE SET
+         invoice_no = EXCLUDED.invoice_no,
+         user_id = EXCLUDED.user_id,
+         order_no = EXCLUDED.order_no,
+         invoice_title = EXCLUDED.invoice_title,
+         tax_no = EXCLUDED.tax_no,
+         invoice_type = EXCLUDED.invoice_type,
+         amount_fen = EXCLUDED.amount_fen,
+         status = EXCLUDED.status,
+         email = EXCLUDED.email,
+         receiver_name = EXCLUDED.receiver_name,
+         receiver_phone = EXCLUDED.receiver_phone,
+         receiver_address = EXCLUDED.receiver_address,
+         reject_reason = EXCLUDED.reject_reason,
+         issued_at = EXCLUDED.issued_at,
+         invoice_file_asset_id = EXCLUDED.invoice_file_asset_id,
+         express_company = EXCLUDED.express_company,
+         express_no = EXCLUDED.express_no,
+         gmt_modified = EXCLUDED.gmt_modified,
+         deleted = EXCLUDED.deleted,
+         attributes = EXCLUDED.attributes`,
+      [
+        toBigInt(invoice.id),
+        invoice.invoiceNo,
+        toBigInt(invoice.userId),
+        invoice.orderNo,
+        invoice.invoiceTitle,
+        invoice.taxNo,
+        invoice.invoiceType || "VAT_NORMAL",
+        number(invoice.amountFen),
+        invoice.status || "PENDING",
+        nullable(invoice.email),
+        nullable(invoice.receiverName),
+        nullable(invoice.receiverPhone),
+        nullable(invoice.receiverAddress),
+        nullable(invoice.rejectReason),
+        nullableTimestamp(invoice.issuedAt),
+        nullableBigInt(invoice.invoiceFileAssetId),
+        nullable(invoice.expressCompany),
+        nullable(invoice.expressNo),
+        timestamp(invoice.createdAt),
+        timestamp(invoice.updatedAt || invoice.createdAt),
+        boolean(invoice.deleted),
+        json(invoice.attributes || {})
+      ]
+    );
+  }
+
+  for (const log of store.adminOperationLogs.values()) {
+    await client.query(
+      `INSERT INTO admin_operation_log (id, admin_user_id, action, target_type, target_id, before_json, after_json, remark, gmt_create, gmt_modified, deleted, attributes)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+       ON CONFLICT (id) DO UPDATE SET
+         action = EXCLUDED.action,
+         target_type = EXCLUDED.target_type,
+         target_id = EXCLUDED.target_id,
+         before_json = EXCLUDED.before_json,
+         after_json = EXCLUDED.after_json,
+         remark = EXCLUDED.remark,
+         gmt_modified = EXCLUDED.gmt_modified,
+         deleted = EXCLUDED.deleted,
+         attributes = EXCLUDED.attributes`,
+      [
+        toBigInt(log.id),
+        toBigInt(log.adminUserId),
+        log.action,
+        log.targetType,
+        nullable(log.targetId),
+        json(log.before),
+        json(log.after),
+        nullable(log.remark),
+        timestamp(log.createdAt),
+        timestamp(log.updatedAt || log.createdAt),
+        boolean(log.deleted),
+        json(log.attributes || {})
       ]
     );
   }
@@ -595,11 +728,16 @@ function nullableNumber(value) {
 }
 
 function toBigInt(value) {
-  return Number(String(value || 0));
+  const parsed = Number(String(value || 0));
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function nullableBigInt(value) {
   return value === undefined || value === null || value === "" ? null : toBigInt(value);
+}
+
+function boolean(value) {
+  return Boolean(value);
 }
 
 function json(value) {

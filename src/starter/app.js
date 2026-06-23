@@ -14,7 +14,7 @@ import * as workflowService from "../service/creation/workflowService.js";
 import * as billingService from "../service/billing/billingService.js";
 import * as trialService from "../service/billing/trialService.js";
 import * as homeService from "../service/home/homeService.js";
-import * as adminService from "../service/operation/adminService.js";
+import * as adminService from "../service/admin/adminService.js";
 import * as modelClient from "../infrastructure/middleware/modelClient.js";
 import { docsHtml, openApiSpec } from "./openapi.js";
 import { hydrateRuntimeStore, persistRuntimeStore, runtimeStoreHealth } from "../infrastructure/middleware/runtimeStore.js";
@@ -100,6 +100,12 @@ router.post("/api/v1/provider/images/generations", async ({ body }) => {
   }
   return rawJson(await modelClient.createImageGeneration(body));
 });
+router.post("/api/v1/provider/videos/generations", async ({ body }) => {
+  if (body.stream !== false) {
+    return providerStream(await modelClient.createVideoGenerationStream(body));
+  }
+  return rawJson(await modelClient.createVideoGeneration(body));
+});
 router.get("/api/v1/provider/tools", async () => ({ items: modelClient.supportedModelTools() }));
 router.post("/api/v1/provider/tools/:toolCode", async ({ params, body }) => rawJson(await modelClient.callModelTool(params.toolCode, body)));
 
@@ -139,23 +145,55 @@ router.post("/api/v1/subscriptions/cancel-auto-renew", async ({ user }) => {
   return null;
 });
 
-router.get("/api/admin/v1/users", async ({ url }) => page(adminService.users(), url), { admin: true });
-router.patch("/api/admin/v1/users/:userId/status", async ({ params, body }) => adminService.updateUserStatus(params.userId, body.status), { admin: true });
-router.post("/api/admin/v1/users/:userId/point-adjustments", async ({ params, body }) => adminService.adjustPoints(params.userId, body.amount, body.reason), { admin: true });
-router.get("/api/admin/v1/orders", async ({ url }) => page(adminService.adminOrders(url.searchParams.get("status")), url), { admin: true });
+router.get("/api/admin/v1/dashboard", async () => adminService.dashboard(), { admin: true });
+router.get("/api/admin/v1/users", async ({ url }) => page(adminService.users(Object.fromEntries(url.searchParams)), url), { admin: true });
+router.get("/api/admin/v1/users/:userId", async ({ params }) => adminService.userDetail(params.userId), { admin: true });
+router.patch("/api/admin/v1/users/:userId/status", async ({ user, params, body }) => adminService.updateUserStatus(user, params.userId, body.status), { admin: true });
+router.post("/api/admin/v1/users/:userId/point-adjustments", async ({ user, params, body }) => adminService.adjustPoints(user, params.userId, body.amount, body.reason), { admin: true });
+router.get("/api/admin/v1/orders", async ({ url }) => page(adminService.adminOrders(Object.fromEntries(url.searchParams)), url), { admin: true });
+router.get("/api/admin/v1/orders/:orderNo", async ({ params }) => adminService.orderDetail(params.orderNo), { admin: true });
 router.get("/api/admin/v1/plans", async () => ({ items: adminService.plans() }), { admin: true });
-router.post("/api/admin/v1/plans", async ({ body }) => adminService.savePlan(body), { admin: true });
-router.put("/api/admin/v1/plans/:planCode", async ({ params, body }) => adminService.savePlan(body, params.planCode), { admin: true });
-router.patch("/api/admin/v1/plans/:planCode/status", async ({ params, body }) => adminService.updatePlanStatus(params.planCode, body.status), { admin: true });
+router.get("/api/admin/v1/plans/:planCode", async ({ params }) => adminService.planDetail(params.planCode), { admin: true });
+router.post("/api/admin/v1/plans", async ({ user, body }) => adminService.savePlan(user, body), { admin: true });
+router.put("/api/admin/v1/plans/:planCode", async ({ user, params, body }) => adminService.savePlan(user, body, params.planCode), { admin: true });
+router.patch("/api/admin/v1/plans/:planCode/status", async ({ user, params, body }) => adminService.updatePlanStatus(user, params.planCode, body.status), { admin: true });
 router.get("/api/admin/v1/model-configs", async () => ({ items: adminService.modelConfigs() }), { admin: true });
-router.put("/api/admin/v1/model-configs/:modelCode", async ({ params, body }) => adminService.saveModelConfig(params.modelCode, body), { admin: true });
-router.patch("/api/admin/v1/model-configs/:modelCode/status", async ({ params, body }) => adminService.updateModelStatus(params.modelCode, body.status), { admin: true });
-router.get("/api/admin/v1/prompt-templates", async () => ({ items: adminService.promptTemplates() }), { admin: true });
-router.post("/api/admin/v1/prompt-templates", async ({ body }) => adminService.savePromptTemplate(body), { admin: true });
-router.put("/api/admin/v1/prompt-templates/:code", async ({ params, body }) => adminService.savePromptTemplate(body, params.code), { admin: true });
-router.get("/api/admin/v1/inspirations", async () => ({ items: adminService.inspirations() }), { admin: true });
-router.post("/api/admin/v1/inspirations", async ({ body }) => adminService.saveInspiration(body), { admin: true });
-router.put("/api/admin/v1/inspirations/:id", async ({ params, body }) => adminService.saveInspiration(body, params.id), { admin: true });
+router.get("/api/admin/v1/model-configs/:modelCode", async ({ params }) => adminService.modelDetail(params.modelCode), { admin: true });
+router.put("/api/admin/v1/model-configs/:modelCode", async ({ user, params, body }) => adminService.saveModelConfig(user, params.modelCode, body), { admin: true });
+router.patch("/api/admin/v1/model-configs/:modelCode/status", async ({ user, params, body }) => adminService.updateModelStatus(user, params.modelCode, body.status), { admin: true });
+router.get("/api/admin/v1/prompt-templates", async ({ url }) => ({ items: adminService.promptTemplates(Object.fromEntries(url.searchParams)) }), { admin: true });
+router.get("/api/admin/v1/prompt-templates/:code", async ({ params }) => adminService.promptTemplateDetail(params.code), { admin: true });
+router.post("/api/admin/v1/prompt-templates", async ({ user, body }) => adminService.savePromptTemplate(user, body), { admin: true });
+router.put("/api/admin/v1/prompt-templates/:code", async ({ user, params, body }) => adminService.savePromptTemplate(user, body, params.code), { admin: true });
+router.patch("/api/admin/v1/prompt-templates/:code/status", async ({ user, params, body }) => adminService.updatePromptTemplateStatus(user, params.code, body.status), { admin: true });
+router.get("/api/admin/v1/inspirations", async ({ url }) => ({ items: adminService.inspirations(Object.fromEntries(url.searchParams)) }), { admin: true });
+router.get("/api/admin/v1/inspirations/:id", async ({ params }) => adminService.inspirationDetail(params.id), { admin: true });
+router.post("/api/admin/v1/inspirations", async ({ user, body }) => adminService.saveInspiration(user, body), { admin: true });
+router.put("/api/admin/v1/inspirations/:id", async ({ user, params, body }) => adminService.saveInspiration(user, body, params.id), { admin: true });
+router.patch("/api/admin/v1/inspirations/:id/status", async ({ user, params, body }) => adminService.updateInspirationStatus(user, params.id, body.status), { admin: true });
+router.get("/api/admin/v1/categories", async ({ url }) => page(adminService.categories(Object.fromEntries(url.searchParams)), url), { admin: true });
+router.get("/api/admin/v1/categories/:code", async ({ params }) => adminService.categoryDetail(params.code), { admin: true });
+router.post("/api/admin/v1/categories", async ({ user, body }) => adminService.saveCategory(user, body), { admin: true });
+router.put("/api/admin/v1/categories/:code", async ({ user, params, body }) => adminService.saveCategory(user, body, params.code), { admin: true });
+router.patch("/api/admin/v1/categories/:code/status", async ({ user, params, body }) => adminService.updateCategoryStatus(user, params.code, body.status), { admin: true });
+router.delete("/api/admin/v1/categories/:code", async ({ user, params }) => {
+  adminService.deleteCategory(user, params.code);
+  return noContent();
+}, { admin: true });
+router.get("/api/admin/v1/workflows", async ({ url }) => page(adminService.adminWorkflows(Object.fromEntries(url.searchParams)), url), { admin: true });
+router.get("/api/admin/v1/workflows/:workflowId", async ({ params }) => adminService.workflowDetail(params.workflowId), { admin: true });
+router.post("/api/admin/v1/workflows", async ({ user, body }) => adminService.saveWorkflow(user, body), { admin: true });
+router.put("/api/admin/v1/workflows/:workflowId", async ({ user, params, body }) => adminService.saveWorkflow(user, body, params.workflowId), { admin: true });
+router.patch("/api/admin/v1/workflows/:workflowId/status", async ({ user, params, body }) => adminService.updateWorkflowStatus(user, params.workflowId, body.status), { admin: true });
+router.delete("/api/admin/v1/workflows/:workflowId", async ({ user, params }) => {
+  adminService.deleteWorkflow(user, params.workflowId);
+  return noContent();
+}, { admin: true });
+router.get("/api/admin/v1/invoices", async ({ url }) => page(adminService.invoices(Object.fromEntries(url.searchParams)), url), { admin: true });
+router.get("/api/admin/v1/invoices/:invoiceId", async ({ params }) => adminService.invoiceDetail(params.invoiceId), { admin: true });
+router.post("/api/admin/v1/invoices", async ({ user, body }) => adminService.saveInvoice(user, body), { admin: true });
+router.put("/api/admin/v1/invoices/:invoiceId", async ({ user, params, body }) => adminService.saveInvoice(user, body, params.invoiceId), { admin: true });
+router.patch("/api/admin/v1/invoices/:invoiceId/status", async ({ user, params, body }) => adminService.updateInvoiceStatus(user, params.invoiceId, body.status, body), { admin: true });
 
 router.get("/api/v3/swagger", async () => openApiSpec(), { public: true, rawSuccess: true });
 router.get("/api/doc.html", async () => html(docsHtml()), { public: true });

@@ -48,6 +48,7 @@
 | 生成任务 | `POST /api/v1/generation-tasks/:taskId/cancel` | 取消排队中或可取消的运行中生成任务。 | 画布页 - 生成任务卡片取消按钮。 |
 | 模型网关 | `POST /api/v1/provider/chat/completions` | 后端代理 302.AI OpenAI 兼容聊天接口；支持 `stream=true`，SSE 直接透传，前端不接触 API Key。 | 画布页右侧聊天面板、智能体/Codex skill 提取等需要 ChatGPT SSE 的入口。 |
 | 模型网关 | `POST /api/v1/provider/images/generations` | 后端代理 302.AI OpenAI 兼容图片生成接口；支持 `image2.0` 和 `Nanobanana 2.0` 模型别名，支持流式图片事件透传。 | 画布页 - 图片生成节点、图片创作面板。 |
+| 模型网关 | `POST /api/v1/provider/videos/generations` | 官方视频模型统一入口；同一接口通过 `model` 切换 `seedance2.0` 和 `happy-horse`，支持将任务状态包装为 ChatGPT/OpenAI 风格 SSE。 | 画布页 - 视频生成节点、图生视频/文生视频面板、商品视频生成入口。 |
 | 模型网关 | `GET /api/v1/provider/tools` | 返回后端白名单小工具及当前是否配置真实 302 endpoint。 | 前端启动时判断抠图、擦除、扩图、放大等工具入口是否可用。 |
 | 模型网关 | `POST /api/v1/provider/tools/:toolCode` | 后端代理白名单小工具调用，真实 endpoint 由环境变量配置，避免开放代理。 | 画布页/素材详情 - 抠图、物体擦除、图片扩展、图片放大、图片转 3D、反推提示词、商品图替换、姿态变换、画质增强。 |
 | AI 对话 | `POST /api/v1/chat-sessions` | 创建 AI 对话会话，可绑定项目。 | 画布页右侧聊天面板 - 新建对话。 |
