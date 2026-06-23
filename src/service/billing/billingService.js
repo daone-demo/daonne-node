@@ -258,7 +258,6 @@ function paymentNotifySignature(body) {
     .update(payload)
     .digest("hex");
 }
-
 function safeEqual(actual, expected) {
   const actualBuffer = Buffer.from(String(actual));
   const expectedBuffer = Buffer.from(String(expected));
