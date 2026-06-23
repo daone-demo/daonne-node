@@ -80,6 +80,9 @@ async function createLoginSession(user, includeAdminFields = false) {
   }
   return {
     token,
+    accessToken: token,
+    refreshToken: token,
+    expires: new Date(session.expiresAt).toISOString(),
     expiresInSeconds: appConfig.auth.tokenTtlSeconds,
     user: includeAdminFields ? toAdminLoginUser(user) : toLoginUser(user)
   };

@@ -75,6 +75,25 @@ export const appConfig = {
     defaultCodexModel: modelProviderValue("defaultCodexModel", env("MODEL_DEFAULT_CODEX_MODEL", "gpt-5.5")),
     defaultImageModel: modelProviderValue("defaultImageModel", env("MODEL_DEFAULT_IMAGE_MODEL", "gpt-image-2")),
     toolsBaseUrl: modelProviderValue("toolsBaseUrl", env("MODEL_TOOLS_BASE_URL", env("MODEL_OPENAI_BASE_URL", env("MODEL_ENDPOINT", "https://api.302.ai")))),
+    videos: {
+      seedance: {
+        apiKey: modelProviderVideoValue("seedance", "apiKey", env("SEEDANCE_API_KEY", "")),
+        baseUrl: modelProviderVideoValue("seedance", "baseUrl", env("SEEDANCE_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3")),
+        model: modelProviderVideoValue("seedance", "model", env("SEEDANCE_MODEL", "seedance-2-0")),
+        createPath: modelProviderVideoValue("seedance", "createPath", env("SEEDANCE_CREATE_PATH", "/contents/generations/tasks")),
+        statusPath: modelProviderVideoValue("seedance", "statusPath", env("SEEDANCE_STATUS_PATH", "/contents/generations/tasks/{taskId}"))
+      },
+      happyHorse: {
+        apiKey: modelProviderVideoValue("happyHorse", "apiKey", env("HAPPY_HORSE_API_KEY", "")),
+        baseUrl: modelProviderVideoValue("happyHorse", "baseUrl", env("HAPPY_HORSE_BASE_URL", "https://queue.fal.run")),
+        model: modelProviderVideoValue("happyHorse", "model", env("HAPPY_HORSE_MODEL", "alibaba/happy-horse/text-to-video")),
+        textModel: modelProviderVideoValue("happyHorse", "textModel", env("HAPPY_HORSE_TEXT_MODEL", "alibaba/happy-horse/text-to-video")),
+        imageModel: modelProviderVideoValue("happyHorse", "imageModel", env("HAPPY_HORSE_IMAGE_MODEL", "alibaba/happy-horse/image-to-video")),
+        createPath: modelProviderVideoValue("happyHorse", "createPath", env("HAPPY_HORSE_CREATE_PATH", "/{model}")),
+        statusPath: modelProviderVideoValue("happyHorse", "statusPath", env("HAPPY_HORSE_STATUS_PATH", "/{model}/requests/{taskId}/status")),
+        resultPath: modelProviderVideoValue("happyHorse", "resultPath", env("HAPPY_HORSE_RESULT_PATH", "/{model}/requests/{taskId}"))
+      }
+    },
     tools: {
       removeBackground: modelProviderToolValue("removeBackground", env("MODEL_TOOL_REMOVE_BACKGROUND_PATH", "")),
       eraser: modelProviderToolValue("eraser", env("MODEL_TOOL_ERASER_PATH", "")),
@@ -196,6 +215,8 @@ function missingRequiredConfig() {
   if (!appConfig.model.mockEnabled) {
     requireKeys(missing, ["MODEL_API_KEY"]);
     requireOneOf(missing, ["MODEL_OPENAI_BASE_URL", "MODEL_ENDPOINT"]);
+    requireOneOf(missing, ["SEEDANCE_API_KEY", "model-provider.local.json videos.seedance.apiKey"]);
+    requireOneOf(missing, ["HAPPY_HORSE_API_KEY", "model-provider.local.json videos.happyHorse.apiKey"]);
   }
 
   if (!appConfig.contentSafety.mockEnabled) {
@@ -269,7 +290,7 @@ function loadEnvFile(filePath) {
     if (index <= 0) continue;
     const key = line.slice(0, index).trim();
     const value = unquote(line.slice(index + 1).trim());
-    if (process.env[key] === undefined) {
+    if (process.env[key] === undefined || process.env[key] === "") {
       process.env[key] = value;
     }
   }
@@ -291,6 +312,12 @@ function modelProviderValue(key, fallback) {
 function modelProviderToolValue(key, fallback) {
   const tools = localModelProviderConfig.tools || {};
   return tools[key] === undefined || tools[key] === "" ? fallback : tools[key];
+}
+
+function modelProviderVideoValue(provider, key, fallback) {
+  const videos = localModelProviderConfig.videos || {};
+  const config = videos[provider] || {};
+  return config[key] === undefined || config[key] === "" ? fallback : config[key];
 }
 
 function env(key, fallback) {

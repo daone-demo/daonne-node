@@ -131,6 +131,16 @@ export function openApiSpec() {
           size: string("1024x1024", "图片尺寸"),
           stream: boolean(false, "是否透传图片生成 SSE")
         }, "模型网关图片生成请求", ["prompt"]),
+        ProviderVideoGenerationRequest: object({
+          model: string("seedance2.0", "视频模型：seedance2.0 或 happy-horse"),
+          prompt: string("商品鞋在白色摄影棚中旋转展示", "视频提示词"),
+          imageUrl: string("https://example.com/product.png", "可选参考图 URL"),
+          duration: integer(5, "视频时长，按模型支持范围传递"),
+          aspectRatio: string("16:9", "画幅比例"),
+          resolution: string("720p", "分辨率"),
+          stream: boolean(true, "是否使用 ChatGPT/OpenAI 风格 SSE"),
+          providerBody: object({}, "可选：直接按官方平台参数转发")
+        }, "视频模型网关请求", ["model", "prompt"]),
         ProviderToolRequest: object({
           imageUrl: string("https://example.com/input.png", "工具输入图片 URL"),
           parameters: object({}, "工具参数，按 302.AI 对应工具文档传递")
@@ -219,7 +229,34 @@ export function openApiSpec() {
           categoryCode: string("BRAND", "分类编码"),
           coverUrl: string("https://example.com/cover.png", "封面 URL"),
           prompt: string("生成一张品牌海报", "提示词")
-        }, "保存灵感请求")
+        }, "保存灵感请求"),
+        AdminWorkflowSaveRequest: object({
+          name: string("电商主图批量生成", "工作流名称"),
+          description: string("商品图上传、抠图、场景生成与导出", "说明"),
+          categoryCode: string("ECOMMERCE", "分类编码"),
+          categoryName: string("电商营销", "分类名称"),
+          workflowData: object({}, "工作流 JSON")
+        }, "保存后台工作流请求", ["name", "workflowData"]),
+        AdminCategorySaveRequest: object({
+          categoryCode: string("ECOMMERCE", "分类编码"),
+          categoryName: string("电商营销", "分类名称"),
+          scope: string("ALL", "使用范围：ALL、INSPIRATION、TEMPLATE"),
+          sortNo: integer(10, "排序")
+        }, "保存分类请求", ["categoryCode", "categoryName"]),
+        AdminInvoiceSaveRequest: object({
+          userId: string("10001", "用户 ID"),
+          orderNo: string("DN20260618001", "订单号"),
+          invoiceTitle: string("杭州星图创意有限公司", "发票抬头"),
+          taxNo: string("913301********221X", "税号"),
+          invoiceType: string("VAT_NORMAL", "发票类型"),
+          amountFen: integer(599900, "开票金额，单位分")
+        }, "保存开票申请请求", ["userId", "orderNo", "invoiceTitle", "taxNo"]),
+        AdminInvoiceStatusRequest: object({
+          status: string("ISSUED", "开票状态"),
+          rejectReason: string("资料不完整", "驳回原因"),
+          expressCompany: string("顺丰", "快递公司"),
+          expressNo: string("SF123", "快递单号")
+        }, "修改开票状态请求", ["status"])
       }
     },
     security: [{ BearerAuth: [] }],
@@ -257,6 +294,7 @@ export function openApiSpec() {
       "/v1/generation-tasks/{taskId}/cancel": { post: op("取消任务", { params: [pathParam("taskId", "生成任务 ID")] }) },
       "/v1/provider/chat/completions": { post: op("302.AI 聊天模型网关，支持 ChatGPT/OpenAI SSE", { body: "ProviderChatCompletionRequest" }) },
       "/v1/provider/images/generations": { post: op("302.AI 图片生成模型网关", { body: "ProviderImageGenerationRequest" }) },
+      "/v1/provider/videos/generations": { post: op("官方视频模型网关，支持 Seedance 2.0 和 HappyHorse", { body: "ProviderVideoGenerationRequest" }) },
       "/v1/provider/tools": { get: op("模型小工具白名单") },
       "/v1/provider/tools/{toolCode}": { post: op("302.AI 小工具网关", { params: [pathParam("toolCode", "工具编码")], body: "ProviderToolRequest" }) },
       "/v1/chat-sessions": { get: op("对话列表", { query: [queryParam("projectId", "项目 ID"), ...pageParams()] }), post: op("创建对话", { body: "ChatSessionCreateRequest" }) },
@@ -275,20 +313,34 @@ export function openApiSpec() {
       "/v1/payments/{payType}/notify": { post: op("支付服务端通知", { public: true, params: [pathParam("payType", "支付方式：WECHAT、ALIPAY")], headers: [headerParam("X-Daone-Payment-Signature", "支付通知签名")], body: "PaymentNotifyRequest" }) },
       "/v1/subscriptions/cancel-auto-renew": { post: op("取消自动续费") },
       "/v1/home": { get: op("首页聚合", { public: true, query: [queryParam("categoryCode", "灵感分类编码，默认 ALL")] }) },
-      "/admin/v1/users": { get: op("后台用户列表", { query: pageParams() }) },
+      "/admin/v1/dashboard": { get: op("后台首页运营概览") },
+      "/admin/v1/users": { get: op("后台用户列表", { query: [queryParam("keyword", "关键词"), queryParam("status", "用户状态"), queryParam("role", "角色"), ...pageParams()] }) },
+      "/admin/v1/users/{userId}": { get: op("后台用户详情", { params: [pathParam("userId", "用户 ID")] }) },
       "/admin/v1/users/{userId}/status": { patch: op("修改用户状态", { params: [pathParam("userId", "用户 ID")], body: "AdminUserStatusRequest" }) },
       "/admin/v1/users/{userId}/point-adjustments": { post: op("人工调整积分", { params: [pathParam("userId", "用户 ID")], body: "AdminPointAdjustmentRequest" }) },
-      "/admin/v1/orders": { get: op("后台订单列表", { query: [queryParam("status", "订单状态"), ...pageParams()] }) },
+      "/admin/v1/orders": { get: op("后台订单列表", { query: [queryParam("keyword", "关键词"), queryParam("status", "订单状态"), queryParam("payType", "支付方式"), queryParam("dateFrom", "开始日期"), queryParam("dateTo", "结束日期"), ...pageParams()] }) },
+      "/admin/v1/orders/{orderNo}": { get: op("后台订单详情", { params: [pathParam("orderNo", "订单号")] }) },
       "/admin/v1/plans": { get: op("后台套餐列表"), post: op("创建套餐", { body: "AdminPlanSaveRequest" }) },
-      "/admin/v1/plans/{planCode}": { put: op("修改套餐", { params: [pathParam("planCode", "套餐编码")], body: "AdminPlanSaveRequest" }) },
+      "/admin/v1/plans/{planCode}": { get: op("套餐详情", { params: [pathParam("planCode", "套餐编码")] }), put: op("修改套餐", { params: [pathParam("planCode", "套餐编码")], body: "AdminPlanSaveRequest" }) },
       "/admin/v1/plans/{planCode}/status": { patch: op("修改套餐状态", { params: [pathParam("planCode", "套餐编码")], body: "AdminPlanStatusRequest" }) },
       "/admin/v1/model-configs": { get: op("模型配置列表") },
-      "/admin/v1/model-configs/{modelCode}": { put: op("修改模型配置", { params: [pathParam("modelCode", "模型编码")], body: "AdminModelConfigRequest" }) },
+      "/admin/v1/model-configs/{modelCode}": { get: op("模型配置详情", { params: [pathParam("modelCode", "模型编码")] }), put: op("修改模型配置", { params: [pathParam("modelCode", "模型编码")], body: "AdminModelConfigRequest" }) },
       "/admin/v1/model-configs/{modelCode}/status": { patch: op("修改模型状态", { params: [pathParam("modelCode", "模型编码")], body: "AdminModelStatusRequest" }) },
       "/admin/v1/prompt-templates": { get: op("提示词模板列表"), post: op("创建提示词模板", { body: "AdminPromptTemplateSaveRequest" }) },
-      "/admin/v1/prompt-templates/{code}": { put: op("修改提示词模板", { params: [pathParam("code", "模板编码")], body: "AdminPromptTemplateSaveRequest" }) },
+      "/admin/v1/prompt-templates/{code}": { get: op("提示词模板详情", { params: [pathParam("code", "模板编码")] }), put: op("修改提示词模板", { params: [pathParam("code", "模板编码")], body: "AdminPromptTemplateSaveRequest" }) },
+      "/admin/v1/prompt-templates/{code}/status": { patch: op("修改提示词模板状态", { params: [pathParam("code", "模板编码")], body: "AdminPlanStatusRequest" }) },
       "/admin/v1/inspirations": { get: op("后台灵感列表"), post: op("创建灵感", { body: "AdminInspirationSaveRequest" }) },
-      "/admin/v1/inspirations/{id}": { put: op("修改灵感", { params: [pathParam("id", "灵感 ID")], body: "AdminInspirationSaveRequest" }) },
+      "/admin/v1/inspirations/{id}": { get: op("灵感详情", { params: [pathParam("id", "灵感 ID")] }), put: op("修改灵感", { params: [pathParam("id", "灵感 ID")], body: "AdminInspirationSaveRequest" }) },
+      "/admin/v1/inspirations/{id}/status": { patch: op("修改灵感状态", { params: [pathParam("id", "灵感 ID")], body: "AdminPlanStatusRequest" }) },
+      "/admin/v1/categories": { get: op("分类列表", { query: [queryParam("keyword", "关键词"), queryParam("status", "状态"), queryParam("scope", "使用范围"), ...pageParams()] }), post: op("创建分类", { body: "AdminCategorySaveRequest" }) },
+      "/admin/v1/categories/{code}": { get: op("分类详情", { params: [pathParam("code", "分类编码")] }), put: op("修改分类", { params: [pathParam("code", "分类编码")], body: "AdminCategorySaveRequest" }), delete: op("删除分类", { params: [pathParam("code", "分类编码")] }) },
+      "/admin/v1/categories/{code}/status": { patch: op("修改分类状态", { params: [pathParam("code", "分类编码")], body: "AdminPlanStatusRequest" }) },
+      "/admin/v1/workflows": { get: op("后台工作流列表", { query: [queryParam("keyword", "关键词"), queryParam("status", "状态"), queryParam("categoryCode", "分类编码"), ...pageParams()] }), post: op("创建后台工作流", { body: "AdminWorkflowSaveRequest" }) },
+      "/admin/v1/workflows/{workflowId}": { get: op("后台工作流详情", { params: [pathParam("workflowId", "工作流 ID")] }), put: op("修改后台工作流", { params: [pathParam("workflowId", "工作流 ID")], body: "AdminWorkflowSaveRequest" }), delete: op("删除后台工作流", { params: [pathParam("workflowId", "工作流 ID")] }) },
+      "/admin/v1/workflows/{workflowId}/status": { patch: op("修改后台工作流状态", { params: [pathParam("workflowId", "工作流 ID")], body: "AdminPlanStatusRequest" }) },
+      "/admin/v1/invoices": { get: op("开票申请列表", { query: [queryParam("keyword", "关键词"), queryParam("status", "状态"), queryParam("invoiceType", "发票类型"), queryParam("dateFrom", "开始日期"), queryParam("dateTo", "结束日期"), ...pageParams()] }), post: op("创建开票申请", { body: "AdminInvoiceSaveRequest" }) },
+      "/admin/v1/invoices/{invoiceId}": { get: op("开票详情", { params: [pathParam("invoiceId", "开票申请 ID")] }), put: op("修改开票申请", { params: [pathParam("invoiceId", "开票申请 ID")], body: "AdminInvoiceSaveRequest" }) },
+      "/admin/v1/invoices/{invoiceId}/status": { patch: op("修改开票状态", { params: [pathParam("invoiceId", "开票申请 ID")], body: "AdminInvoiceStatusRequest" }) },
       "/mock-files/upload": { post: op("本地 Mock 上传，仅 storage mock 启用时可用", { public: true }) },
       "/mock-files/{objectKey}": { get: op("本地 Mock 文件读取，仅 storage mock 启用时可用", { public: true, params: [pathParam("objectKey", "Mock 文件对象 Key")] }) },
       "/health": { get: op("健康检查与环境配置状态", { public: true }) },
