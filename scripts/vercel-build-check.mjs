@@ -10,9 +10,7 @@ const required = [
   "package.json",
   "src/starter/app.js",
   "src/infrastructure/config/env.js",
-  ".env.development.local",
-  ".env.test.local",
-  ".env.prod.local",
+  `config/application.${health.profile}.env`,
   "public/index.html",
   "vercel.json"
 ];

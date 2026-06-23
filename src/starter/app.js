@@ -41,7 +41,7 @@ router.get("/api/v1/points/ledger", async ({ user, url }) => page(userService.po
 router.get("/api/v1/points/ledger/:ledgerId", async ({ user, params }) => userService.pointLedgerDetail(user.id, params.ledgerId));
 
 router.post("/api/v1/projects", async ({ user, body }) => projectService.createProject(user.id, body.title));
-router.get("/api/v1/projects", async ({ user, url }) => page(projectService.listProjects(user.id, url.searchParams.get("keyword")), url));
+router.get("/api/v1/projects", async ({ user, url }) => page(user ? projectService.listProjects(user.id, url.searchParams.get("keyword")) : [], url), { public: true });
 router.get("/api/v1/projects/:projectId", async ({ user, params }) => projectService.getProject(user.id, params.projectId));
 router.patch("/api/v1/projects/:projectId", async ({ user, params, body }) => projectService.updateProject(user.id, params.projectId, body));
 router.delete("/api/v1/projects/:projectId", async ({ user, params }) => {

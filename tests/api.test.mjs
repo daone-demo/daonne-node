@@ -98,6 +98,12 @@ describe("Daone Vercel Node API", () => {
     assert.equal(response.body.data.revision, 0);
     assert.ok(response.body.data.canvasData);
 
+    response = await request("GET", "/api/v1/projects");
+    assert.equal(response.status, 200);
+    assert.deepEqual(response.body.data.items, []);
+    assert.deepEqual(response.body.data.records, []);
+    assert.equal(response.body.data.total, 0);
+
     response = await request("PUT", `/api/v1/projects/${projectId}/canvas`, {
       revision: 0,
       saveType: "MANUAL",
