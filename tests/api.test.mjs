@@ -101,7 +101,7 @@ describe("Daone Vercel Node API", () => {
 
     response = await request("GET", "/api/v1/projects");
     assert.equal(response.status, 200);
-    assert.deepEqual(response.body.data.items, []);
+    assert.equal(response.body.data.items, undefined);
     assert.deepEqual(response.body.data.records, []);
     assert.equal(response.body.data.total, 0);
 

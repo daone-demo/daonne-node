@@ -11,7 +11,6 @@ export function success(data = null) {
 
 export function pageResponse(records, page, pageSize, total) {
   return {
-    items: records,
     records,
     page,
     pageSize,

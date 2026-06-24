@@ -68,7 +68,7 @@ router.post("/api/mock-files/upload", async () => {
   return { uploaded: true };
 }, { public: true });
 router.post("/api/v1/assets", async ({ user, body }) => assetService.completeUpload(user.id, body));
-router.get("/api/v1/assets", async ({ user, url }) => recordsOnlyPage(assetService.listAssets(user.id, Object.fromEntries(url.searchParams)), url));
+router.get("/api/v1/assets", async ({ user, url }) => page(assetService.listAssets(user.id, Object.fromEntries(url.searchParams)), url));
 router.get("/api/v1/assets/:assetId", async ({ user, params }) => assetService.getAsset(user.id, params.assetId));
 router.put("/api/v1/assets/:assetId/favorite", async ({ user, params }) => assetService.favoriteAsset(user.id, params.assetId));
 router.delete("/api/v1/assets/:assetId/favorite", async ({ user, params }) => {
@@ -277,12 +277,6 @@ function page(items, url) {
   const { page: current, pageSize } = parsePage(url.searchParams);
   const { records, total } = paginate(items, current, pageSize);
   return pageResponse(records, current, pageSize, total);
-}
-
-function recordsOnlyPage(items, url) {
-  const response = page(items, url);
-  delete response.items;
-  return response;
 }
 
 function bearerToken(req) {
