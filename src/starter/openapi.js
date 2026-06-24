@@ -314,7 +314,7 @@ export function openApiSpec() {
       "/v1/subscriptions/cancel-auto-renew": { post: op("取消自动续费") },
       "/v1/home": { get: op("首页聚合", { public: true, query: [queryParam("categoryCode", "灵感分类编码，默认 ALL")] }) },
       "/admin/v1/dashboard": { get: op("后台首页运营概览") },
-      "/admin/v1/users": { get: op("后台用户列表", { query: [queryParam("keyword", "关键词"), queryParam("status", "用户状态"), queryParam("role", "角色"), ...pageParams()] }) },
+      "/admin/v1/users": { get: op("后台用户列表", { query: [queryParam("keyword", "关键词"), queryParam("status", "用户状态"), ...pageParams()] }) },
       "/admin/v1/users/{userId}": { get: op("后台用户详情", { params: [pathParam("userId", "用户 ID")] }) },
       "/admin/v1/users/{userId}/status": { patch: op("修改用户状态", { params: [pathParam("userId", "用户 ID")], body: "AdminUserStatusRequest" }) },
       "/admin/v1/users/{userId}/point-adjustments": { post: op("人工调整积分", { params: [pathParam("userId", "用户 ID")], body: "AdminPointAdjustmentRequest" }) },

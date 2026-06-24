@@ -43,9 +43,9 @@ export function dashboard() {
 
 export function users(filters = {}) {
   return [...store.users.values()]
+    .filter((item) => String(item.role || "USER").toUpperCase() === "USER")
     .filter((item) => matchKeyword(item, filters.keyword, ["id", "nickname", "phone", "email"]))
     .filter((item) => !filters.status || item.status === filters.status)
-    .filter((item) => !filters.role || item.role === filters.role)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     .map(userRow);
 }
