@@ -5,7 +5,7 @@ import { nextId } from "../../infrastructure/common/id.js";
 import { badRequest, forbidden, unauthorized } from "../common/errors.js";
 import { cacheDel, cacheGetJson, cacheSetJson, redisCacheEnabled } from "../../infrastructure/middleware/redisCache.js";
 import { sendSms } from "../../infrastructure/middleware/smsClient.js";
-import { findOrCreatePostgresUser } from "../../infrastructure/middleware/postgresRuntimeStore.js";
+import { findOrCreatePostgresUser, findPostgresUserByPhone } from "../../infrastructure/middleware/postgresRuntimeStore.js";
 
 export async function sendSmsCode(phone, scene = "LOGIN") {
   const normalizedPhone = normalizePhone(phone);
@@ -46,7 +46,7 @@ export async function loginBySms(phone, code) {
 export async function sendAdminSmsCode(phone, scene = "ADMIN_LOGIN") {
   const normalizedPhone = normalizePhone(phone);
   assertPhone(normalizedPhone);
-  assertAdminPhone(normalizedPhone);
+  await assertAdminPhone(normalizedPhone);
   return sendSmsCode(normalizedPhone, normalizeAdminScene(scene));
 }
 
@@ -54,7 +54,7 @@ export async function loginAdminBySms(phone, code) {
   const normalizedPhone = normalizePhone(phone);
   const normalizedCode = normalizeCode(code);
   assertPhone(normalizedPhone);
-  assertAdminPhone(normalizedPhone);
+  await assertAdminPhone(normalizedPhone);
   const cached = await getSmsCode(normalizedPhone, "ADMIN_LOGIN");
   if (!cached || cached.expiresAt < Date.now() || cached.code !== normalizedCode) {
     throw badRequest("SMS_CODE_INVALID", "验证码错误或已过期");
@@ -232,10 +232,20 @@ function normalizeAdminScene(scene = "ADMIN_LOGIN") {
   throw badRequest("PARAM_INVALID", "管理后台验证码场景仅支持登录");
 }
 
-function assertAdminPhone(phone) {
-  if (!adminPhones().includes(phone)) {
-    throw forbidden();
+async function assertAdminPhone(phone) {
+  if (adminPhones().includes(phone)) {
+    return;
   }
+  const persisted = await findPostgresUserByPhone(phone);
+  if (persisted?.status === "ENABLED" && persisted.role === "ADMIN") {
+    store.users.set(persisted.id, persisted);
+    return;
+  }
+  const localUser = [...store.users.values()].find((item) => item.phone === phone);
+  if (localUser?.status === "ENABLED" && localUser.role === "ADMIN") {
+    return;
+  }
+  throw forbidden();
 }
 
 function adminPhones() {

@@ -99,6 +99,21 @@ export async function findOrCreatePostgresUser({ phone, nickname, role }) {
   };
 }
 
+export async function findPostgresUserByPhone(phone) {
+  if (!postgresRuntimeStoreEnabled()) {
+    return null;
+  }
+  await ensureRuntimeTable();
+  const { rows } = await getPool().query(
+    `SELECT id, phone, nickname, avatar_url, email, gender, birthday, status, role, created_at, updated_at
+       FROM user_account
+      WHERE phone = $1
+      LIMIT 1`,
+    [phone]
+  );
+  return rows[0] ? mapUserRow(rows[0]) : null;
+}
+
 async function ensureRuntimeTable() {
   if (initialized) {
     return;
@@ -112,6 +127,22 @@ async function ensureRuntimeTable() {
   `);
   await ensureUserIdentity();
   initialized = true;
+}
+
+function mapUserRow(row) {
+  return {
+    id: String(row.id),
+    phone: row.phone,
+    nickname: row.nickname,
+    avatarUrl: row.avatar_url,
+    email: row.email,
+    gender: row.gender,
+    birthday: row.birthday ? toIsoDate(row.birthday) : null,
+    status: row.status,
+    role: row.role,
+    createdAt: toIsoDate(row.created_at),
+    updatedAt: toIsoDate(row.updated_at)
+  };
 }
 
 async function ensureUserIdentity() {
