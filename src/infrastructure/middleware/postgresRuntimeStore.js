@@ -62,7 +62,15 @@ export async function findOrCreatePostgresUser({ phone, nickname, role }) {
     `INSERT INTO user_account
        (phone, nickname, gender, status, role, created_at, updated_at)
      VALUES ($1, $2, 'UNKNOWN', 'ENABLED', $3, NOW(), NOW())
-     ON CONFLICT (phone) DO UPDATE SET phone = EXCLUDED.phone
+     ON CONFLICT (phone) DO UPDATE SET
+       phone = EXCLUDED.phone,
+       role = CASE
+         WHEN user_account.role IS NULL OR user_account.role = '' THEN EXCLUDED.role
+         WHEN EXCLUDED.role IS NULL OR EXCLUDED.role = '' THEN user_account.role
+         WHEN (',' || user_account.role || ',') LIKE ('%,' || EXCLUDED.role || ',%') THEN user_account.role
+         ELSE user_account.role || ',' || EXCLUDED.role
+       END,
+       updated_at = NOW()
      RETURNING id, phone, nickname, avatar_url, email, gender, birthday, status, role, created_at, updated_at`,
     [phone, nickname, role]
   );

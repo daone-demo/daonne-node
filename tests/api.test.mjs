@@ -357,7 +357,7 @@ describe("Daone Vercel Node API", () => {
     response = await request("GET", "/api/admin/v1/users", null, token);
     assert.equal(response.status, 200);
     assert.ok(response.body.data.records.length >= 1);
-    assert.equal(response.body.data.records.some((item) => item.id === adminUserId), false);
+    assert.equal(response.body.data.records.some((item) => item.id === adminUserId), true);
     assert.equal(response.body.data.records.some((item) => item.id === secondUserId), true);
 
     response = await request("GET", "/api/admin/v1/dashboard", null, token);

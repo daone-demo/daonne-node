@@ -35,11 +35,10 @@ export async function loginBySms(phone, code) {
   if (!cached || cached.expiresAt < Date.now() || cached.code !== normalizedCode) {
     throw badRequest("SMS_CODE_INVALID", "验证码错误或已过期");
   }
-  const user = await ensureUserByPhone(normalizedPhone);
+  const user = await ensureUserByPhone(normalizedPhone, { role: "USER" });
   if (user.status !== "ENABLED") {
     throw badRequest("USER_DISABLED", "账号已被禁用");
   }
-  user.role = adminPhones().includes(normalizedPhone) ? "ADMIN" : user.role;
   return createLoginSession(user);
 }
 
@@ -59,11 +58,10 @@ export async function loginAdminBySms(phone, code) {
   if (!cached || cached.expiresAt < Date.now() || cached.code !== normalizedCode) {
     throw badRequest("SMS_CODE_INVALID", "验证码错误或已过期");
   }
-  const user = await ensureUserByPhone(normalizedPhone);
+  const user = await ensureUserByPhone(normalizedPhone, { role: "ADMIN" });
   if (user.status !== "ENABLED") {
     throw badRequest("USER_DISABLED", "账号已被禁用");
   }
-  user.role = "ADMIN";
   return createLoginSession(user, true);
 }
 
@@ -139,10 +137,11 @@ export async function verifySmsCode(phone, code, scene) {
 export async function ensureUserByPhone(phone, defaults = {}) {
   const normalizedPhone = normalizePhone(phone);
   assertPhone(normalizedPhone);
+  const requestedRole = defaults.role || (adminPhones().includes(normalizedPhone) ? "ADMIN" : "USER");
   const persisted = await findOrCreatePostgresUser({
     phone: normalizedPhone,
     nickname: defaults.nickname || `Daone${normalizedPhone.slice(-4)}`,
-    role: adminPhones().includes(normalizedPhone) ? "ADMIN" : "USER"
+    role: requestedRole
   });
   if (persisted) {
     store.users.set(persisted.user.id, persisted.user);
@@ -154,6 +153,7 @@ export async function ensureUserByPhone(phone, defaults = {}) {
   }
   let user = [...store.users.values()].find((item) => item.phone === normalizedPhone);
   if (user) {
+    user.role = mergeRole(user.role, requestedRole);
     return user;
   }
   const id = nextId();
@@ -167,7 +167,7 @@ export async function ensureUserByPhone(phone, defaults = {}) {
     gender: "UNKNOWN",
     birthday: null,
     status: "ENABLED",
-    role: adminPhones().includes(normalizedPhone) ? "ADMIN" : "USER",
+    role: requestedRole,
     createdAt: t,
     updatedAt: t
   };
@@ -237,15 +237,35 @@ async function assertAdminPhone(phone) {
     return;
   }
   const persisted = await findPostgresUserByPhone(phone);
-  if (persisted?.status === "ENABLED" && persisted.role === "ADMIN") {
+  if (persisted?.status === "ENABLED" && hasRole(persisted.role, "ADMIN")) {
     store.users.set(persisted.id, persisted);
     return;
   }
   const localUser = [...store.users.values()].find((item) => item.phone === phone);
-  if (localUser?.status === "ENABLED" && localUser.role === "ADMIN") {
+  if (localUser?.status === "ENABLED" && hasRole(localUser.role, "ADMIN")) {
     return;
   }
   throw forbidden();
+}
+
+function mergeRole(currentRole, role) {
+  const roles = roleList(currentRole);
+  const nextRole = String(role || "").trim().toUpperCase();
+  if (nextRole && !roles.includes(nextRole)) {
+    roles.push(nextRole);
+  }
+  return roles.length ? roles.join(",") : "USER";
+}
+
+function hasRole(currentRole, role) {
+  return roleList(currentRole).includes(String(role || "").trim().toUpperCase());
+}
+
+function roleList(currentRole) {
+  return String(currentRole || "USER")
+    .split(/[,\s]+/)
+    .map((item) => item.trim().toUpperCase())
+    .filter(Boolean);
 }
 
 function adminPhones() {

@@ -237,7 +237,7 @@ export async function handleRequest(req, res) {
     if (!matched.options.public && !user) {
       throw unauthorized();
     }
-    if (matched.options.admin && user.role !== "ADMIN") {
+    if (matched.options.admin && !hasRole(user.role, "ADMIN")) {
       throw forbidden();
     }
     const body = ["POST", "PUT", "PATCH"].includes(req.method) ? await readJson(req) : {};
@@ -288,6 +288,13 @@ function recordsOnlyPage(items, url) {
 function bearerToken(req) {
   const value = req.headers.authorization || "";
   return value.startsWith("Bearer ") ? value.slice(7) : null;
+}
+
+function hasRole(currentRole, role) {
+  return String(currentRole || "USER")
+    .split(/[,\s]+/)
+    .map((item) => item.trim().toUpperCase())
+    .includes(String(role || "").trim().toUpperCase());
 }
 
 function cors(req, res) {
