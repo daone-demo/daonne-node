@@ -1,5 +1,6 @@
 import { store } from "../../infrastructure/db/memoryStore.js";
 import { nextId } from "../../infrastructure/common/id.js";
+import { appConfig } from "../../infrastructure/config/env.js";
 import { badRequest, notFound } from "../common/errors.js";
 
 const ENABLED = "ENABLED";
@@ -205,7 +206,8 @@ export function updatePlanStatus(adminUser, planCode, status) {
 export function modelConfigs() {
   return [...store.models.values()]
     .filter((item) => !item.deleted)
-    .map(modelRow);
+    .map(modelRow)
+    .sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")));
 }
 
 export function modelDetail(modelCode) {
@@ -216,13 +218,29 @@ export function modelDetail(modelCode) {
 export function saveModelConfig(adminUser, modelCode, body) {
   const model = requireModel(modelCode);
   const before = { ...model };
+  let parameters = body.parameters !== undefined ? body.parameters : { ...(model.parameters || {}) };
+  if (body.providerModel !== undefined) {
+    if (!parameters || typeof parameters !== "object" || Array.isArray(parameters)) {
+      parameters = {};
+    }
+    parameters.providerModel = String(body.providerModel);
+  }
+  const attributes = {
+    ...(model.attributes || {}),
+    ...(body.attributes || {})
+  };
+  if (body.gateway !== undefined) attributes.gateway = String(body.gateway).toUpperCase();
+  if (body.provider !== undefined) attributes.provider = body.provider;
+  if (body.description !== undefined) attributes.description = body.description;
+  if (body.supportsStreaming !== undefined) attributes.supportsStreaming = Boolean(body.supportsStreaming);
+  if (body.aliases !== undefined) attributes.aliases = parseAliases(body.aliases);
   Object.assign(model, {
     modelName: body.modelName || body.name || model.modelName,
     taskType: body.taskType || model.taskType,
     basePoints: body.basePoints !== undefined ? Number(body.basePoints) : model.basePoints,
-    parameters: body.parameters !== undefined ? body.parameters : model.parameters,
+    parameters,
     status: body.status || model.status,
-    attributes: body.attributes || model.attributes || {},
+    attributes,
     updatedAt: now()
   });
   audit(adminUser, "MODEL_UPDATE", "MODEL", model.modelCode, before, model);
@@ -561,11 +579,26 @@ function planRow(plan) {
 function modelRow(model) {
   return {
     ...model,
+    surface: model.attributes?.surface || "CAPABILITY",
+    gateway: model.attributes?.gateway || null,
+    provider: model.attributes?.provider || null,
+    providerModel: modelProviderName(model),
+    aliases: Array.isArray(model.attributes?.aliases) ? model.attributes.aliases : [],
+    description: model.attributes?.description || "",
+    supportsStreaming: model.attributes?.supportsStreaming === undefined ? null : model.attributes.supportsStreaming,
     todayCalls: [...store.generationTasks.values()].filter((item) => item.capabilityCode === model.modelCode && sameDay(item.createdAt, new Date().toISOString().slice(0, 10))).length,
     calls: [...store.generationTasks.values()].filter((item) => item.capabilityCode === model.modelCode).length,
     gmtCreate: model.createdAt,
     gmtModified: model.updatedAt
   };
+}
+
+function modelProviderName(model) {
+  const configKey = model.attributes?.providerModelConfigKey;
+  if (configKey && appConfig.model[configKey]) {
+    return appConfig.model[configKey];
+  }
+  return model.parameters?.providerModel || model.attributes?.providerModel || null;
 }
 
 function promptRow(item) {
@@ -807,6 +840,12 @@ function parseJsonArray(value) {
   } catch {
     throw badRequest("PARAM_INVALID", "价格配置必须是 JSON 数组");
   }
+}
+
+function parseAliases(value) {
+  if (Array.isArray(value)) return value.map((item) => String(item).trim()).filter(Boolean);
+  if (typeof value === "string") return value.split(",").map((item) => item.trim()).filter(Boolean);
+  return [];
 }
 
 function yuanToFen(value) {

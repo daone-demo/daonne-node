@@ -94,6 +94,35 @@ describe("Daone Vercel Node API", () => {
     assert.ok(projectId);
     assert.equal(response.body.data.revision, 0);
 
+    response = await request("POST", "/api/v1/chat-sessions", { projectId, title: "商品图对话" }, token);
+    assert.equal(response.status, 200);
+    const chatSessionId = response.body.data.id;
+
+    response = await request("POST", `/api/v1/chat-sessions/${chatSessionId}/messages`, {
+      content: "帮我想一个白底运动鞋商品图提示词",
+      skillCode: "ECOMMERCE_IMAGE",
+      modelCode: "IMAGE_GENERAL_V1",
+      chatModelCode: "gpt5.5"
+    }, token);
+    assert.equal(response.status, 200);
+    assert.equal(response.body.data.message.role, "ASSISTANT");
+    assert.equal(response.body.data.message.content, "Daone mock response");
+    assert.deepEqual(response.body.data.generationTaskIds, []);
+
+    response = await request("GET", `/api/v1/chat-sessions/${chatSessionId}/messages`, null, token);
+    assert.equal(response.status, 200);
+    assert.equal(response.body.data.records.length, 2);
+    assert.equal(response.body.data.records[0].role, "USER");
+    assert.equal(response.body.data.records[1].content, "Daone mock response");
+
+    response = await request("POST", `/api/v1/chat-sessions/${chatSessionId}/messages`, {
+      content: "继续优化一下，不要太夸张",
+      skillCode: "ECOMMERCE_IMAGE",
+      modelCode: "IMAGE_GENERAL_V1"
+    }, token);
+    assert.equal(response.status, 200);
+    assert.equal(response.body.data.message.content, "Daone mock response");
+
     response = await request("GET", `/api/v1/projects/${projectId}/canvas`, null, token);
     assert.equal(response.status, 200);
     assert.equal(response.body.data.revision, 0);
@@ -437,6 +466,30 @@ describe("Daone Vercel Node API", () => {
     assert.equal(response.status, 200);
     assert.equal(response.body.data.modelCode, "IMAGE_GENERAL_V1");
 
+    response = await request("GET", "/api/admin/v1/model-configs", null, token);
+    assert.equal(response.status, 200);
+    assert.ok(response.body.data.items.some((item) => item.modelCode === "gpt5.5" && item.surface === "PROVIDER" && item.gateway === "CHAT"));
+    assert.ok(response.body.data.items.some((item) => item.modelCode === "image2.0" && item.surface === "PROVIDER" && item.gateway === "IMAGE"));
+    assert.ok(response.body.data.items.some((item) => item.modelCode === "happy-horse" && item.surface === "PROVIDER" && item.gateway === "VIDEO"));
+
+    response = await request("PATCH", "/api/admin/v1/model-configs/gpt5.5/status", { status: "DISABLED" }, token);
+    assert.equal(response.status, 200);
+    assert.equal(response.body.data.status, "DISABLED");
+
+    response = await request("GET", "/api/v1/provider/chat/models", null, token);
+    assert.equal(response.status, 200);
+    assert.ok(!response.body.data.items.some((item) => item.code === "gpt5.5"));
+
+    response = await request("POST", "/api/v1/provider/chat/completions", {
+      model: "gpt5.5",
+      messages: [{ role: "user", content: "hello" }]
+    }, token);
+    assert.equal(response.status, 400);
+    assert.equal(response.body.code, "MODEL_DISABLED");
+
+    response = await request("PATCH", "/api/admin/v1/model-configs/gpt5.5/status", { status: "ENABLED" }, token);
+    assert.equal(response.status, 200);
+
     response = await request("PATCH", "/api/admin/v1/model-configs/IMAGE_GENERAL_V1/status", { status: "ENABLED" }, token);
     assert.equal(response.status, 200);
 
@@ -469,9 +522,17 @@ describe("Daone Vercel Node API", () => {
     assert.equal(response.status, 200);
     assert.equal(response.body.data.categoryCode, "ECOMMERCE");
 
+    response = await request("GET", "/api/v1/home", null, token);
+    assert.equal(response.status, 200);
+    assert.ok(response.body.data.inspirationCategories.some((item) => item.code === "ECOMMERCE" && item.name === "电商营销"));
+
     response = await request("PATCH", "/api/admin/v1/categories/ECOMMERCE/status", { status: "DISABLED" }, token);
     assert.equal(response.status, 200);
     assert.equal(response.body.data.status, "DISABLED");
+
+    response = await request("GET", "/api/v1/home", null, token);
+    assert.equal(response.status, 200);
+    assert.ok(!response.body.data.inspirationCategories.some((item) => item.code === "ECOMMERCE"));
 
     response = await request("GET", "/api/admin/v1/categories", null, token);
     assert.equal(response.status, 200);
