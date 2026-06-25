@@ -3,13 +3,13 @@
   "version": 2,
   "functions": {
     "api/index.js": {
-      "maxDuration": 10
+      "maxDuration": 60
     },
     "api/v3/swagger.js": {
-      "maxDuration": 10
+      "maxDuration": 60
     },
     "api/[...path].js": {
-      "maxDuration": 10
+      "maxDuration": 60
     }
   },
   "rewrites": [

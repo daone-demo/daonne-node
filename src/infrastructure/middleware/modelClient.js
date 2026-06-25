@@ -220,8 +220,9 @@ export async function createProviderGenerationTask(task, capability) {
   if (appConfig.model.mockEnabled) {
     return null;
   }
-  const response = await fetch(appConfig.model.endpoint.replace(/\/$/, ""), {
+  const response = await fetchModelProvider(appConfig.model.endpoint.replace(/\/$/, ""), {
     method: "POST",
+    signal: modelRequestTimeoutSignal(),
     headers: {
       "content-type": "application/json",
       authorization: `Bearer ${appConfig.model.apiKey}`
@@ -625,8 +626,9 @@ async function fetchVideoProvider(provider, path, method, body, providerModel = 
     ? { authorization: `Key ${provider.config.apiKey}` }
     : { authorization: `Bearer ${provider.config.apiKey}` };
   const resolved = resolveVideoProviderUrl(provider, path, providerModel);
-  return fetch(resolved, {
+  return fetchModelProvider(resolved, {
     method,
+    signal: modelRequestTimeoutSignal(),
     headers: {
       ...headers,
       ...(body ? { "content-type": "application/json" } : {})
@@ -727,8 +729,9 @@ async function fetchProvider(baseUrl, path, body, extraHeaders = {}) {
   if (!appConfig.model.apiKey) {
     throw badGateway("MODEL_API_KEY_MISSING", "模型服务 API Key 未配置");
   }
-  return fetch(resolveProviderUrl(baseUrl, path), {
+  return fetchModelProvider(resolveProviderUrl(baseUrl, path), {
     method: "POST",
+    signal: modelRequestTimeoutSignal(),
     headers: {
       "content-type": "application/json",
       authorization: `Bearer ${appConfig.model.apiKey}`,
@@ -736,6 +739,27 @@ async function fetchProvider(baseUrl, path, body, extraHeaders = {}) {
     },
     body: JSON.stringify(body)
   });
+}
+
+function modelRequestTimeoutSignal() {
+  return AbortSignal.timeout(appConfig.model.requestTimeoutMs);
+}
+
+async function fetchModelProvider(url, options) {
+  try {
+    return await fetch(url, options);
+  } catch (error) {
+    if (isModelRequestTimeout(error)) {
+      throw badGateway("MODEL_SERVICE_TIMEOUT", "外部模型服务请求超时", {
+        timeoutMs: appConfig.model.requestTimeoutMs
+      });
+    }
+    throw error;
+  }
+}
+
+function isModelRequestTimeout(error) {
+  return error?.name === "TimeoutError" || error?.name === "AbortError";
 }
 
 function resolveProviderUrl(baseUrl, path) {

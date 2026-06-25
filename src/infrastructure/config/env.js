@@ -71,6 +71,7 @@ export const appConfig = {
     endpoint: modelProviderValue("endpoint", env("MODEL_ENDPOINT", "")),
     apiKey: modelProviderValue("apiKey", env("MODEL_API_KEY", "")),
     openaiBaseUrl: modelProviderValue("openaiBaseUrl", env("MODEL_OPENAI_BASE_URL", env("MODEL_ENDPOINT", "https://api.302.ai"))),
+    requestTimeoutMs: numberEnv("MODEL_REQUEST_TIMEOUT_MS", 60000),
     defaultChatModel: modelProviderValue("defaultChatModel", env("MODEL_DEFAULT_CHAT_MODEL", "gpt-5.5")),
     defaultCodexModel: modelProviderValue("defaultCodexModel", env("MODEL_DEFAULT_CODEX_MODEL", "gpt-5.5")),
     defaultImageModel: modelProviderValue("defaultImageModel", env("MODEL_DEFAULT_IMAGE_MODEL", "gpt-image-2")),
