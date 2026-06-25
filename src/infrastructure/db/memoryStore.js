@@ -2,6 +2,153 @@ import { getSequence, nextId, setSequence, syncSequenceFromIds } from "../common
 
 const now = () => new Date().toISOString();
 
+const DEFAULT_MODEL_CONFIGS = [
+  {
+    modelCode: "TEXT_COPY_V1",
+    modelName: "文案生成",
+    taskType: "TEXT",
+    basePoints: 5,
+    parameters: {},
+    attributes: { surface: "CAPABILITY" }
+  },
+  {
+    modelCode: "IMAGE_GENERAL_V1",
+    modelName: "通用图片生成",
+    taskType: "IMAGE",
+    basePoints: 20,
+    parameters: { aspectRatio: ["1:1", "3:4", "4:3", "16:9"], resolution: ["1K", "2K"], count: { min: 1, max: 4 } },
+    attributes: { surface: "CAPABILITY" }
+  },
+  {
+    modelCode: "VIDEO_GENERAL_V1",
+    modelName: "通用视频生成",
+    taskType: "VIDEO",
+    basePoints: 100,
+    parameters: { duration: [5, 10], aspectRatio: ["16:9", "9:16"] },
+    attributes: { surface: "CAPABILITY" }
+  },
+  {
+    modelCode: "gpt5.5",
+    modelName: "GPT-5.5",
+    taskType: "CHAT",
+    basePoints: 0,
+    parameters: { providerModel: "gpt-5.5" },
+    attributes: {
+      surface: "PROVIDER",
+      gateway: "CHAT",
+      provider: "302.AI",
+      description: "通用智能体与复杂文本生成模型",
+      supportsStreaming: true,
+      aliases: ["gpt-5.5"]
+    }
+  },
+  {
+    modelCode: "gemini-3-1-pro-preview",
+    modelName: "Gemini 3.1 Pro Preview",
+    taskType: "CHAT",
+    basePoints: 0,
+    parameters: { providerModel: "gemini-3.1-pro-preview" },
+    attributes: {
+      surface: "PROVIDER",
+      gateway: "CHAT",
+      provider: "302.AI",
+      description: "Gemini 3.1 Pro 预览模型",
+      supportsStreaming: true,
+      aliases: ["gemini-3.1-pro-preview", "gemini 3.1 pro preview"]
+    }
+  },
+  {
+    modelCode: "codex",
+    modelName: "Codex",
+    taskType: "CHAT",
+    basePoints: 0,
+    parameters: {},
+    attributes: {
+      surface: "PROVIDER",
+      gateway: "CHAT",
+      provider: "302.AI",
+      description: "面向 skill 提取和代码类任务的模型入口",
+      supportsStreaming: true,
+      aliases: ["Codex"],
+      providerModelConfigKey: "defaultCodexModel"
+    }
+  },
+  {
+    modelCode: "image2.0",
+    modelName: "Image 2.0",
+    taskType: "IMAGE",
+    basePoints: 0,
+    parameters: { providerModel: "gpt-image-2" },
+    attributes: {
+      surface: "PROVIDER",
+      gateway: "IMAGE",
+      provider: "302.AI",
+      description: "OpenAI 兼容图片生成模型",
+      supportsStreaming: true,
+      aliases: ["gpt-image-2"]
+    }
+  },
+  {
+    modelCode: "nanobanana-2.0",
+    modelName: "Nanobanana 2.0",
+    taskType: "IMAGE",
+    basePoints: 0,
+    parameters: { providerModel: "gemini-3.1-flash-image-preview" },
+    attributes: {
+      surface: "PROVIDER",
+      gateway: "IMAGE",
+      provider: "302.AI",
+      description: "Gemini 图片生成预览模型",
+      supportsStreaming: true,
+      aliases: ["Nanobanana 2.0", "nanobanana2", "gemini-3.1-flash-image-preview"]
+    }
+  },
+  {
+    modelCode: "seedance2.0",
+    modelName: "Seedance 2.0",
+    taskType: "VIDEO",
+    basePoints: 0,
+    parameters: { providerModel: "seedance2.0" },
+    attributes: {
+      surface: "PROVIDER",
+      gateway: "VIDEO",
+      provider: "BytePlus/火山方舟",
+      providerKey: "seedance",
+      description: "Seedance 2.0 视频生成模型",
+      supportsStreaming: true,
+      aliases: ["seedance", "seedance2", "seedance-2.0", "seedance-2-0"]
+    }
+  },
+  {
+    modelCode: "happy-horse",
+    modelName: "HappyHorse",
+    taskType: "VIDEO",
+    basePoints: 0,
+    parameters: { providerModel: "happy-horse" },
+    attributes: {
+      surface: "PROVIDER",
+      gateway: "VIDEO",
+      provider: "fal.ai",
+      providerKey: "happyHorse",
+      description: "HappyHorse 文生视频/图生视频模型",
+      supportsStreaming: true,
+      aliases: ["happy horse", "happyhorse"]
+    }
+  }
+];
+
+const DEFAULT_CONTENT_CATEGORIES = [
+  ["BRAND", "品牌设计", "ALL", 10, 128],
+  ["POSTER", "海报与广告", "ALL", 20, 96],
+  ["ILLUSTRATION", "插画", "INSPIRATION", 30, 74],
+  ["UI", "UI设计", "INSPIRATION", 40, 0],
+  ["CHARACTER", "角色设计", "INSPIRATION", 50, 0],
+  ["SOFTWARE", "软件与开发", "INSPIRATION", 60, 0],
+  ["PRODUCT", "产品设计", "ALL", 70, 0],
+  ["ARCHITECTURE", "建筑设计", "INSPIRATION", 80, 0],
+  ["VIDEO", "视频与分镜", "TEMPLATE", 90, 32]
+];
+
 export const store = globalThis.__DAONE_STORE__ ?? {
   users: new Map(),
   smsCodes: new Map(),
@@ -173,20 +320,14 @@ function seed() {
       });
     }
   }
-  if (store.models.size === 0) {
-    for (const model of [
-      ["TEXT_COPY_V1", "文案生成", "TEXT", 5, {}],
-      ["IMAGE_GENERAL_V1", "通用图片生成", "IMAGE", 20, { aspectRatio: ["1:1", "3:4", "4:3", "16:9"], resolution: ["1K", "2K"], count: { min: 1, max: 4 } }],
-      ["VIDEO_GENERAL_V1", "通用视频生成", "VIDEO", 100, { duration: [5, 10], aspectRatio: ["16:9", "9:16"] }]
-    ]) {
-      store.models.set(model[0], {
+  for (const model of DEFAULT_MODEL_CONFIGS) {
+    if (!store.models.has(model.modelCode)) {
+      store.models.set(model.modelCode, {
         id: nextId(),
-        modelCode: model[0],
-        modelName: model[1],
-        taskType: model[2],
-        basePoints: model[3],
-        parameters: model[4],
+        ...model,
         status: "ENABLED",
+        deleted: false,
+        attributes: { ...(model.attributes || {}) },
         createdAt: t,
         updatedAt: t
       });
@@ -247,13 +388,8 @@ function seed() {
       });
     }
   }
-  if (store.contentCategories.size === 0) {
-    for (const item of [
-      ["BRAND", "品牌设计", "ALL", 10, 128],
-      ["POSTER", "海报与广告", "ALL", 20, 96],
-      ["ILLUSTRATION", "插画", "INSPIRATION", 30, 74],
-      ["VIDEO", "视频与分镜", "TEMPLATE", 40, 32]
-    ]) {
+  for (const item of DEFAULT_CONTENT_CATEGORIES) {
+    if (!store.contentCategories.has(item[0])) {
       const id = nextId();
       store.contentCategories.set(item[0], {
         id,

@@ -1,61 +1,6 @@
 import { appConfig } from "../config/env.js";
+import { store } from "../db/memoryStore.js";
 import { badGateway, badRequest } from "../../service/common/errors.js";
-
-const CHAT_MODEL_ALIASES = {
-  "gpt5.5": "gpt-5.5",
-  "gpt-5.5": "gpt-5.5",
-  "gemini-3-1-pro-preview": "gemini-3.1-pro-preview",
-  "gemini-3.1-pro-preview": "gemini-3.1-pro-preview",
-  "gemini 3.1 pro preview": "gemini-3.1-pro-preview",
-  codex: appConfig.model.defaultCodexModel
-};
-
-const CHAT_MODELS = [
-  {
-    code: "gpt5.5",
-    model: "gpt-5.5",
-    name: "GPT-5.5",
-    provider: "302.AI",
-    description: "通用智能体与复杂文本生成模型",
-    supportsStreaming: true
-  },
-  {
-    code: "gemini-3-1-pro-preview",
-    model: "gemini-3.1-pro-preview",
-    name: "Gemini 3.1 Pro Preview",
-    provider: "302.AI",
-    description: "Gemini 3.1 Pro 预览模型",
-    supportsStreaming: true
-  },
-  {
-    code: "codex",
-    model: appConfig.model.defaultCodexModel,
-    name: "Codex",
-    provider: "302.AI",
-    description: "面向 skill 提取和代码类任务的模型入口",
-    supportsStreaming: true
-  }
-];
-
-const IMAGE_MODEL_ALIASES = {
-  "image2.0": "gpt-image-2",
-  "gpt-image-2": "gpt-image-2",
-  "nanobanana 2.0": "gemini-3.1-flash-image-preview",
-  "nanobanana-2.0": "gemini-3.1-flash-image-preview",
-  nanobanana2: "gemini-3.1-flash-image-preview",
-  "gemini-3.1-flash-image-preview": "gemini-3.1-flash-image-preview"
-};
-
-const VIDEO_MODEL_ALIASES = {
-  seedance: "seedance",
-  "seedance2": "seedance",
-  "seedance2.0": "seedance",
-  "seedance-2.0": "seedance",
-  "seedance-2-0": "seedance",
-  "happy-horse": "happyHorse",
-  "happy horse": "happyHorse",
-  happyhorse: "happyHorse"
-};
 
 const TOOL_PATHS = {
   "remove-background": appConfig.model.tools.removeBackground,
@@ -132,11 +77,17 @@ export async function createChatCompletionStream(body = {}) {
 }
 
 export function supportedChatModels() {
-  const defaultModel = normalizeChatModel(appConfig.model.defaultChatModel);
-  return CHAT_MODELS.map((item) => ({
-    ...item,
-    model: normalizeChatModel(item.model),
-    default: normalizeChatModel(item.model) === defaultModel
+  const defaultModel = resolveProviderModel("CHAT", appConfig.model.defaultChatModel, { allowPassthrough: true, ignoreStatus: true });
+  const defaultProviderModel = defaultModel ? providerModelName(defaultModel) : appConfig.model.defaultChatModel;
+  return providerModels("CHAT", { enabledOnly: true }).map((item) => ({
+    code: item.modelCode,
+    model: providerModelName(item),
+    name: item.modelName,
+    provider: item.attributes?.provider || null,
+    description: item.attributes?.description || "",
+    supportsStreaming: item.attributes?.supportsStreaming !== false,
+    default: providerModelName(item) === defaultProviderModel,
+    attributes: item.attributes || {}
   }));
 }
 
@@ -249,20 +200,19 @@ function normalizeStatus(status) {
 
 function normalizeChatModel(model) {
   const value = String(model || appConfig.model.defaultChatModel || "gpt-5.5").trim();
-  return CHAT_MODEL_ALIASES[value.toLowerCase()] || value;
+  const managed = resolveProviderModel("CHAT", value, { allowPassthrough: true });
+  return managed ? providerModelName(managed) : value;
 }
 
 function normalizeImageModel(model) {
   const value = String(model || appConfig.model.defaultImageModel || "gpt-image-2").trim();
-  return IMAGE_MODEL_ALIASES[value.toLowerCase()] || value;
+  const managed = resolveProviderModel("IMAGE", value, { allowPassthrough: true });
+  return managed ? providerModelName(managed) : value;
 }
 
 function normalizeVideoProvider(model) {
-  const value = String(model || "seedance2.0").trim();
-  const name = VIDEO_MODEL_ALIASES[value.toLowerCase()];
-  if (!name) {
-    throw badRequest("VIDEO_MODEL_NOT_SUPPORTED", "视频模型不支持");
-  }
+  const video = resolveVideoProviderModel(model);
+  const name = video.name;
   const config = name === "seedance" ? appConfig.model.videos.seedance : appConfig.model.videos.happyHorse;
   const apiKey = config.apiKey;
   if (!apiKey) {
@@ -270,9 +220,76 @@ function normalizeVideoProvider(model) {
   }
   return {
     name,
-    publicModel: name === "seedance" ? "seedance2.0" : "happy-horse",
+    publicModel: video.publicModel,
     config
   };
+}
+
+function resolveVideoProviderModel(model) {
+  const value = String(model || "seedance2.0").trim();
+  const managed = resolveProviderModel("VIDEO", value, {
+    allowPassthrough: false,
+    unsupportedCode: "VIDEO_MODEL_NOT_SUPPORTED",
+    unsupportedMessage: "视频模型不支持"
+  });
+  const name = managed?.attributes?.providerKey;
+  if (!managed || !name) {
+    throw badRequest("VIDEO_MODEL_NOT_SUPPORTED", "视频模型不支持");
+  }
+  return {
+    name,
+    publicModel: providerModelName(managed)
+  };
+}
+
+function resolveProviderModel(gateway, requestedModel, options = {}) {
+  const value = String(requestedModel || "").trim();
+  const match = findProviderModel(gateway, value);
+  if (!match) {
+    if (options.allowPassthrough) {
+      return null;
+    }
+    throw badRequest(options.unsupportedCode || "MODEL_NOT_SUPPORTED", options.unsupportedMessage || "模型不支持");
+  }
+  if (!options.ignoreStatus && match.status !== "ENABLED") {
+    throw badRequest("MODEL_DISABLED", "模型已停用");
+  }
+  return match;
+}
+
+function findProviderModel(gateway, value) {
+  const normalized = normalizeLookupKey(value);
+  return providerModels(gateway).find((item) => providerLookupValues(item).some((candidate) => normalizeLookupKey(candidate) === normalized));
+}
+
+function providerModels(gateway, options = {}) {
+  return [...store.models.values()]
+    .filter((item) => !item.deleted)
+    .filter((item) => item.attributes?.surface === "PROVIDER")
+    .filter((item) => item.attributes?.gateway === gateway)
+    .filter((item) => !options.enabledOnly || item.status === "ENABLED")
+    .sort((a, b) => String(a.createdAt || "").localeCompare(String(b.createdAt || "")));
+}
+
+function providerLookupValues(model) {
+  return [
+    model.modelCode,
+    model.modelName,
+    providerModelName(model),
+    ...(Array.isArray(model.attributes?.aliases) ? model.attributes.aliases : [])
+  ].filter(Boolean);
+}
+
+function providerModelName(model) {
+  const configKey = model.attributes?.providerModelConfigKey;
+  if (configKey && appConfig.model[configKey]) {
+    return appConfig.model[configKey];
+  }
+  return model.parameters?.providerModel || model.attributes?.providerModel || model.modelCode;
+}
+
+function normalizeLookupKey(value) {
+  return String(value || "").trim().toLowerCase();
 }
 
 async function proxyOpenAiJson(path, body) {
@@ -591,13 +608,11 @@ function mockVideoGenerationStream(body) {
 }
 
 function normalizeMockVideoModel(model) {
-  const value = String(model || "seedance2.0").toLowerCase();
-  return VIDEO_MODEL_ALIASES[value] === "happyHorse" ? "happy-horse" : "seedance2.0";
+  return resolveVideoProviderModel(model).publicModel;
 }
 
 function normalizeVideoProviderNameForMock(model) {
-  const value = String(model || "seedance2.0").toLowerCase();
-  return VIDEO_MODEL_ALIASES[value] === "happyHorse" ? "happyHorse" : "seedance";
+  return resolveVideoProviderModel(model).name;
 }
 
 function chatChunk(id, model, role, content, finishReason = null) {

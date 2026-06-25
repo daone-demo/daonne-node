@@ -8,6 +8,8 @@ import { createProviderGenerationTask } from "../../infrastructure/middleware/mo
 
 export function capabilities() {
   return [...store.models.values()]
+    .filter((item) => !item.deleted)
+    .filter((item) => item.attributes?.surface !== "PROVIDER")
     .filter((item) => item.status === "ENABLED")
     .sort((a, b) => a.taskType.localeCompare(b.taskType))
     .map((item) => ({

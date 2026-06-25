@@ -426,6 +426,30 @@ describe("Daone Vercel Node API", () => {
     assert.equal(response.status, 200);
     assert.equal(response.body.data.modelCode, "IMAGE_GENERAL_V1");
 
+    response = await request("GET", "/api/admin/v1/model-configs", null, token);
+    assert.equal(response.status, 200);
+    assert.ok(response.body.data.items.some((item) => item.modelCode === "gpt5.5" && item.surface === "PROVIDER" && item.gateway === "CHAT"));
+    assert.ok(response.body.data.items.some((item) => item.modelCode === "image2.0" && item.surface === "PROVIDER" && item.gateway === "IMAGE"));
+    assert.ok(response.body.data.items.some((item) => item.modelCode === "happy-horse" && item.surface === "PROVIDER" && item.gateway === "VIDEO"));
+
+    response = await request("PATCH", "/api/admin/v1/model-configs/gpt5.5/status", { status: "DISABLED" }, token);
+    assert.equal(response.status, 200);
+    assert.equal(response.body.data.status, "DISABLED");
+
+    response = await request("GET", "/api/v1/provider/chat/models", null, token);
+    assert.equal(response.status, 200);
+    assert.ok(!response.body.data.items.some((item) => item.code === "gpt5.5"));
+
+    response = await request("POST", "/api/v1/provider/chat/completions", {
+      model: "gpt5.5",
+      messages: [{ role: "user", content: "hello" }]
+    }, token);
+    assert.equal(response.status, 400);
+    assert.equal(response.body.code, "MODEL_DISABLED");
+
+    response = await request("PATCH", "/api/admin/v1/model-configs/gpt5.5/status", { status: "ENABLED" }, token);
+    assert.equal(response.status, 200);
+
     response = await request("PATCH", "/api/admin/v1/model-configs/IMAGE_GENERAL_V1/status", { status: "ENABLED" }, token);
     assert.equal(response.status, 200);
 
@@ -458,9 +482,17 @@ describe("Daone Vercel Node API", () => {
     assert.equal(response.status, 200);
     assert.equal(response.body.data.categoryCode, "ECOMMERCE");
 
+    response = await request("GET", "/api/v1/home", null, token);
+    assert.equal(response.status, 200);
+    assert.ok(response.body.data.inspirationCategories.some((item) => item.code === "ECOMMERCE" && item.name === "电商营销"));
+
     response = await request("PATCH", "/api/admin/v1/categories/ECOMMERCE/status", { status: "DISABLED" }, token);
     assert.equal(response.status, 200);
     assert.equal(response.body.data.status, "DISABLED");
+
+    response = await request("GET", "/api/v1/home", null, token);
+    assert.equal(response.status, 200);
+    assert.ok(!response.body.data.inspirationCategories.some((item) => item.code === "ECOMMERCE"));
 
     response = await request("GET", "/api/admin/v1/categories", null, token);
     assert.equal(response.status, 200);
