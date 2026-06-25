@@ -4,8 +4,38 @@ import { badGateway, badRequest } from "../../service/common/errors.js";
 const CHAT_MODEL_ALIASES = {
   "gpt5.5": "gpt-5.5",
   "gpt-5.5": "gpt-5.5",
+  "gemini-3-1-pro-preview": "gemini-3.1-pro-preview",
+  "gemini-3.1-pro-preview": "gemini-3.1-pro-preview",
+  "gemini 3.1 pro preview": "gemini-3.1-pro-preview",
   codex: appConfig.model.defaultCodexModel
 };
+
+const CHAT_MODELS = [
+  {
+    code: "gpt5.5",
+    model: "gpt-5.5",
+    name: "GPT-5.5",
+    provider: "302.AI",
+    description: "通用智能体与复杂文本生成模型",
+    supportsStreaming: true
+  },
+  {
+    code: "gemini-3-1-pro-preview",
+    model: "gemini-3.1-pro-preview",
+    name: "Gemini 3.1 Pro Preview",
+    provider: "302.AI",
+    description: "Gemini 3.1 Pro 预览模型",
+    supportsStreaming: true
+  },
+  {
+    code: "codex",
+    model: appConfig.model.defaultCodexModel,
+    name: "Codex",
+    provider: "302.AI",
+    description: "面向 skill 提取和代码类任务的模型入口",
+    supportsStreaming: true
+  }
+];
 
 const IMAGE_MODEL_ALIASES = {
   "image2.0": "gpt-image-2",
@@ -99,6 +129,15 @@ export async function createChatCompletionStream(body = {}) {
     model: normalizeChatModel(body.model),
     stream: true
   });
+}
+
+export function supportedChatModels() {
+  const defaultModel = normalizeChatModel(appConfig.model.defaultChatModel);
+  return CHAT_MODELS.map((item) => ({
+    ...item,
+    model: normalizeChatModel(item.model),
+    default: normalizeChatModel(item.model) === defaultModel
+  }));
 }
 
 export async function createImageGeneration(body = {}) {

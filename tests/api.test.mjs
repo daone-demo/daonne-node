@@ -230,6 +230,21 @@ describe("Daone Vercel Node API", () => {
     assert.equal(response.body.code, undefined);
     assert.equal(response.body.data, undefined);
 
+    response = await request("GET", "/api/v1/provider/chat/models", null, token);
+    assert.equal(response.status, 200);
+    assert.equal(response.body.code, "OK");
+    assert.ok(response.body.data.items.some((item) => item.code === "gpt5.5" && item.model === "gpt-5.5"));
+    assert.ok(response.body.data.items.some((item) => item.code === "gemini-3-1-pro-preview" && item.model === "gemini-3.1-pro-preview"));
+    assert.ok(response.body.data.items.every((item) => item.supportsStreaming === true));
+
+    response = await request("POST", "/api/v1/provider/chat/completions", {
+      model: "gemini-3-1-pro-preview",
+      messages: [{ role: "user", content: "hello" }]
+    }, token);
+    assert.equal(response.status, 200);
+    assert.equal(response.body.object, "chat.completion");
+    assert.equal(response.body.model, "gemini-3.1-pro-preview");
+
     response = await request("POST", "/api/v1/provider/chat/completions", {
       model: "Codex",
       messages: [{ role: "user", content: "hello" }],
