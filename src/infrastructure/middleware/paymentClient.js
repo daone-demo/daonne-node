@@ -4,7 +4,7 @@ import { appConfig } from "../config/env.js";
 
 export async function createChannelPayment(order, payType) {
   if (appConfig.payment.mockEnabled) {
-    if (appConfig.profile !== "local") {
+    if (!isLocalRuntime()) {
       throw new Error("Payment mock is only allowed in local profile");
     }
     return createMockPayment(order, payType);
@@ -16,6 +16,10 @@ export async function createChannelPayment(order, payType) {
     return createAlipayPrecreatePayment(order);
   }
   throw new Error(`Unsupported pay type: ${payType}`);
+}
+
+function isLocalRuntime() {
+  return appConfig.profile === "local" && !process.env.VERCEL && !process.env.VERCEL_ENV;
 }
 
 function createMockPayment(order, payType) {

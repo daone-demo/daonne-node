@@ -35,6 +35,30 @@ describe("Daone Vercel Node API", () => {
     }
   });
 
+  it("does not allow payment mock on Vercel even when profile is local", async () => {
+    const originalVercel = process.env.VERCEL;
+    const originalProfile = appConfig.profile;
+    const originalPaymentMock = appConfig.payment.mockEnabled;
+    try {
+      process.env.VERCEL = "1";
+      appConfig.profile = "local";
+      appConfig.payment.mockEnabled = true;
+      await assert.rejects(
+        () => createChannelPayment({
+          orderNo: "DNMOCK",
+          productName: "测试套餐",
+          amountFen: 9900,
+          currency: "CNY"
+        }, "ALIPAY"),
+        /Payment mock is only allowed/
+      );
+    } finally {
+      restoreEnv("VERCEL", originalVercel);
+      appConfig.profile = originalProfile;
+      appConfig.payment.mockEnabled = originalPaymentMock;
+    }
+  });
+
   it("supports core frontend flow", async () => {
     let response = await request("POST", "/api/v1/auth/sms-codes", {
       phone: "13800138000",
