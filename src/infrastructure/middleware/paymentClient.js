@@ -4,13 +4,38 @@ import { appConfig } from "../config/env.js";
 
 export async function createChannelPayment(order, payType) {
   if (appConfig.payment.mockEnabled) {
-    return null;
+    if (!isLocalRuntime()) {
+      throw new Error("Payment mock is only allowed in local profile");
+    }
+    return createMockPayment(order, payType);
   }
   if (payType === "WECHAT") {
     return createWechatNativePayment(order);
   }
   if (payType === "ALIPAY") {
-    return createAlipayPagePayment(order);
+    return createAlipayPrecreatePayment(order);
+  }
+  throw new Error(`Unsupported pay type: ${payType}`);
+}
+
+function isLocalRuntime() {
+  return appConfig.profile === "local" && !process.env.VERCEL && !process.env.VERCEL_ENV;
+}
+
+function createMockPayment(order, payType) {
+  if (payType === "WECHAT") {
+    return {
+      payType: "WECHAT",
+      qrCodeContent: `weixin://wxpay/mock/${order.orderNo}`,
+      redirectUrl: null
+    };
+  }
+  if (payType === "ALIPAY") {
+    return {
+      payType: "ALIPAY",
+      qrCodeContent: `https://openapi.alipay.com/mock/${order.orderNo}`,
+      redirectUrl: null
+    };
   }
   throw new Error(`Unsupported pay type: ${payType}`);
 }
@@ -60,12 +85,13 @@ async function createWechatNativePayment(order) {
   };
 }
 
-function createAlipayPagePayment(order) {
+async function createAlipayPrecreatePayment(order) {
   const gateway = "https://openapi.alipay.com/gateway.do";
   const params = {
     app_id: appConfig.payment.alipay.appId,
-    method: "alipay.trade.page.pay",
+    method: "alipay.trade.precreate",
     charset: "utf-8",
+    format: "JSON",
     sign_type: "RSA2",
     timestamp: formatBeijingTime(new Date()),
     version: "1.0",
@@ -74,15 +100,34 @@ function createAlipayPagePayment(order) {
       out_trade_no: order.orderNo,
       total_amount: (order.amountFen / 100).toFixed(2),
       subject: order.productName,
-      product_code: "FAST_INSTANT_TRADE_PAY"
+      product_code: "FACE_TO_FACE_PAYMENT"
     })
   };
-  const unsigned = sortedQuery(params);
-  const sign = crypto.sign("RSA-SHA256", Buffer.from(unsigned), appConfig.payment.alipay.privateKey.replace(/\\n/g, "\n")).toString("base64");
+  const signContent = sortedSignContent(params);
+  const sign = crypto.sign("RSA-SHA256", Buffer.from(signContent), appConfig.payment.alipay.privateKey.replace(/\\n/g, "\n")).toString("base64");
+  const body = formBody({ ...params, sign });
+  const response = await fetch(gateway, {
+    method: "POST",
+    headers: {
+      "content-type": "application/x-www-form-urlencoded;charset=utf-8",
+      accept: "application/json"
+    },
+    body
+  });
+  const text = await response.text();
+  const result = parseJson(text);
+  const payload = result.alipay_trade_precreate_response || {};
+  if (response.ok && payload.code === "10000") {
+    verifyAlipayResponse(text, "alipay_trade_precreate_response");
+  }
+  if (!response.ok || payload.code !== "10000" || !payload.qr_code) {
+    const errorPayload = result.error_response || payload;
+    throw new Error(`Alipay failed: ${errorPayload.sub_code || errorPayload.code || response.status}`);
+  }
   return {
     payType: "ALIPAY",
-    qrCodeContent: null,
-    redirectUrl: `${gateway}?${unsigned}&sign=${encodeURIComponent(sign)}`
+    qrCodeContent: payload.qr_code,
+    redirectUrl: null
   };
 }
 
@@ -93,15 +138,87 @@ function privateKey() {
   return readFileSync(appConfig.payment.wechatPay.privateKeyPath, "utf8");
 }
 
-function sortedQuery(params) {
+function sortedSignContent(params) {
   return Object.entries(params)
     .filter(([, value]) => value !== undefined && value !== null && value !== "")
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([key, value]) => `${key}=${encodeURIComponent(String(value))}`)
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([key, value]) => `${key}=${String(value)}`)
+    .join("&");
+}
+
+function formBody(params) {
+  return Object.entries(params)
+    .filter(([, value]) => value !== undefined && value !== null && value !== "")
+    .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`)
     .join("&");
 }
 
 function formatBeijingTime(date) {
   const beijing = new Date(date.getTime() + 8 * 60 * 60 * 1000);
   return beijing.toISOString().replace("T", " ").slice(0, 19);
+}
+
+function parseJson(text) {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return {};
+  }
+}
+
+function verifyAlipayResponse(text, responseKey) {
+  const result = JSON.parse(text);
+  const sign = result.sign;
+  const signContent = extractJsonObjectValue(text, responseKey);
+  if (!sign || !signContent) {
+    throw new Error("Alipay response signature missing");
+  }
+  const verified = crypto.verify(
+    "RSA-SHA256",
+    Buffer.from(signContent),
+    appConfig.payment.alipay.publicKey.replace(/\\n/g, "\n"),
+    Buffer.from(sign, "base64")
+  );
+  if (!verified) {
+    throw new Error("Alipay response signature invalid");
+  }
+}
+
+function extractJsonObjectValue(text, key) {
+  const marker = `"${key}"`;
+  const markerIndex = text.indexOf(marker);
+  if (markerIndex < 0) return "";
+  const colonIndex = text.indexOf(":", markerIndex + marker.length);
+  if (colonIndex < 0) return "";
+  const startIndex = text.indexOf("{", colonIndex + 1);
+  if (startIndex < 0) return "";
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let index = startIndex; index < text.length; index += 1) {
+    const char = text[index];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === "\"") {
+        inString = false;
+      }
+      continue;
+    }
+    if (char === "\"") {
+      inString = true;
+      continue;
+    }
+    if (char === "{") {
+      depth += 1;
+    } else if (char === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        return text.slice(startIndex, index + 1);
+      }
+    }
+  }
+  return "";
 }

@@ -87,9 +87,9 @@ Node.js 版本使用轻量 `.env` 文件区分环境，作用类似 Java 的 `ap
 
 环境识别规则：
 
-- 显式配置 `DAONE_PROFILE=local|test|prod` 时优先使用该值。
 - Vercel Production 自动识别为 `prod`。
 - Vercel Preview 自动识别为 `test`。
+- 显式配置 `DAONE_PROFILE=local|test|prod` 仅在非 Vercel 环境优先使用。
 - 本地默认识别为 `local`。
 
 健康检查会返回当前环境和 mock 开关：

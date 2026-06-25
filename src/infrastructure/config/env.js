@@ -270,10 +270,11 @@ function requireAliyunKeys(missing) {
   requireKeys(missing, ["ALIYUN_ACCESS_KEY_ID", "ALIYUN_ACCESS_KEY_SECRET"]);
 }
 
-function resolveProfile() {
-  if (process.env.DAONE_PROFILE) return process.env.DAONE_PROFILE;
+export function resolveProfile() {
   if (process.env.VERCEL_ENV === "production") return "prod";
   if (process.env.VERCEL_ENV === "preview") return "test";
+  if (!process.env.VERCEL_ENV && process.env.VERCEL && process.env.DAONE_PROFILE === "local") return "test";
+  if (process.env.DAONE_PROFILE) return process.env.DAONE_PROFILE;
   return "test";
 }
 

@@ -1,9 +1,10 @@
 import { existsSync, readFileSync } from "node:fs";
 
 function resolveBuildProfile() {
-  if (process.env.DAONE_PROFILE) return process.env.DAONE_PROFILE;
   if (process.env.VERCEL_ENV === "production") return "prod";
   if (process.env.VERCEL_ENV === "preview" || process.env.VERCEL_ENV === "development") return "test";
+  if (process.env.VERCEL && process.env.DAONE_PROFILE === "local") return "test";
+  if (process.env.DAONE_PROFILE) return process.env.DAONE_PROFILE;
   return "test";
 }
 

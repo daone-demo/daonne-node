@@ -1,13 +1,64 @@
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import { describe, it } from "node:test";
 
 process.env.DAONE_PROFILE = "local";
 process.env.DAONE_ADMIN_PHONES = "13800138000";
 const { handleRequest } = await import("../src/starter/app.js");
 const { default: vercelIndexHandler } = await import("../api/index.js");
-const { appConfig } = await import("../src/infrastructure/config/env.js");
+const { appConfig, resolveProfile } = await import("../src/infrastructure/config/env.js");
+const { createChannelPayment } = await import("../src/infrastructure/middleware/paymentClient.js");
 
 describe("Daone Vercel Node API", () => {
+  it("does not allow Vercel deployments to resolve to local profile", () => {
+    const originalProfile = process.env.DAONE_PROFILE;
+    const originalVercel = process.env.VERCEL;
+    const originalVercelEnv = process.env.VERCEL_ENV;
+    try {
+      process.env.DAONE_PROFILE = "local";
+      process.env.VERCEL_ENV = "preview";
+      assert.equal(resolveProfile(), "test");
+
+      process.env.VERCEL_ENV = "production";
+      assert.equal(resolveProfile(), "prod");
+
+      delete process.env.VERCEL_ENV;
+      process.env.VERCEL = "1";
+      assert.equal(resolveProfile(), "test");
+
+      delete process.env.VERCEL;
+      assert.equal(resolveProfile(), "local");
+    } finally {
+      restoreEnv("DAONE_PROFILE", originalProfile);
+      restoreEnv("VERCEL", originalVercel);
+      restoreEnv("VERCEL_ENV", originalVercelEnv);
+    }
+  });
+
+  it("does not allow payment mock on Vercel even when profile is local", async () => {
+    const originalVercel = process.env.VERCEL;
+    const originalProfile = appConfig.profile;
+    const originalPaymentMock = appConfig.payment.mockEnabled;
+    try {
+      process.env.VERCEL = "1";
+      appConfig.profile = "local";
+      appConfig.payment.mockEnabled = true;
+      await assert.rejects(
+        () => createChannelPayment({
+          orderNo: "DNMOCK",
+          productName: "测试套餐",
+          amountFen: 9900,
+          currency: "CNY"
+        }, "ALIPAY"),
+        /Payment mock is only allowed/
+      );
+    } finally {
+      restoreEnv("VERCEL", originalVercel);
+      appConfig.profile = originalProfile;
+      appConfig.payment.mockEnabled = originalPaymentMock;
+    }
+  });
+
   it("supports core frontend flow", async () => {
     let response = await request("POST", "/api/v1/auth/sms-codes", {
       phone: "13800138000",
@@ -392,14 +443,38 @@ describe("Daone Vercel Node API", () => {
     assert.equal(response.status, 200);
     assert.equal(response.body.data.status, "PAID");
 
+    response = await request("POST", "/api/v1/orders", {
+      orderType: "PLAN",
+      productCode: "TEAM_MONTH"
+    }, token, { "Idempotency-Key": "order-2" });
+    assert.equal(response.status, 200);
+    const nonLocalPaymentOrderNo = response.body.data.orderNo;
+    const originalNonLocalProfile = appConfig.profile;
+    const originalNonLocalPaymentMock = appConfig.payment.mockEnabled;
+    try {
+      appConfig.profile = "test";
+      appConfig.payment.mockEnabled = true;
+      response = await request("POST", `/api/v1/orders/${nonLocalPaymentOrderNo}/payments`, {
+        payType: "ALIPAY"
+      }, token);
+      assert.equal(response.status, 502);
+      assert.equal(response.body.code, "PAYMENT_FAILED");
+    } finally {
+      appConfig.profile = originalNonLocalProfile;
+      appConfig.payment.mockEnabled = originalNonLocalPaymentMock;
+    }
+
     const originalProfile = appConfig.profile;
     const originalPaymentMock = appConfig.payment.mockEnabled;
-    appConfig.profile = "prod";
-    appConfig.payment.mockEnabled = false;
-    response = await request("POST", `/api/v1/orders/${orderNo}/mock-paid`, {}, token);
-    assert.equal(response.status, 403);
-    appConfig.profile = originalProfile;
-    appConfig.payment.mockEnabled = originalPaymentMock;
+    try {
+      appConfig.profile = "prod";
+      appConfig.payment.mockEnabled = false;
+      response = await request("POST", `/api/v1/orders/${orderNo}/mock-paid`, {}, token);
+      assert.equal(response.status, 403);
+    } finally {
+      appConfig.profile = originalProfile;
+      appConfig.payment.mockEnabled = originalPaymentMock;
+    }
 
     const originalStorageMock = appConfig.storage.mockEnabled;
     appConfig.storage.mockEnabled = false;
@@ -702,6 +777,60 @@ describe("Daone Vercel Node API", () => {
     assert.equal(response.body.data.canvasData.meta.projectId, projectId);
     assert.equal(response.body.data.canvasData.meta.projectName, "新名称");
   });
+
+  it("creates signed Alipay precreate payments with qr code content", async () => {
+    const { privateKey, publicKey } = crypto.generateKeyPairSync("rsa", {
+      modulusLength: 2048,
+      privateKeyEncoding: { type: "pkcs8", format: "pem" },
+      publicKeyEncoding: { type: "spki", format: "pem" }
+    });
+    const responseContent = JSON.stringify({
+      code: "10000",
+      msg: "Success",
+      out_trade_no: "DNTEST",
+      qr_code: "https://qr.alipay.com/test"
+    });
+    const sign = crypto.sign("RSA-SHA256", Buffer.from(responseContent), privateKey).toString("base64");
+    const responseText = `{"alipay_trade_precreate_response":${responseContent},"sign":"${sign}"}`;
+    const originalFetch = globalThis.fetch;
+    const originalProfile = appConfig.profile;
+    const originalPaymentMock = appConfig.payment.mockEnabled;
+    const originalAlipay = { ...appConfig.payment.alipay };
+    try {
+      appConfig.profile = "test";
+      appConfig.payment.mockEnabled = false;
+      appConfig.payment.alipay.appId = "2021000000000000";
+      appConfig.payment.alipay.privateKey = privateKey;
+      appConfig.payment.alipay.publicKey = publicKey;
+      appConfig.payment.alipay.notifyUrl = "https://www.daoneai.com/api/v1/payments/ALIPAY/notify";
+      globalThis.fetch = async (url, options) => {
+        assert.equal(url, "https://openapi.alipay.com/gateway.do");
+        assert.equal(options.method, "POST");
+        assert.match(options.body, /method=alipay\.trade\.precreate/);
+        assert.match(options.body, /sign=/);
+        return new Response(responseText, {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        });
+      };
+      const payment = await createChannelPayment({
+        orderNo: "DNTEST",
+        productName: "测试套餐",
+        amountFen: 9900,
+        currency: "CNY"
+      }, "ALIPAY");
+      assert.deepEqual(payment, {
+        payType: "ALIPAY",
+        qrCodeContent: "https://qr.alipay.com/test",
+        redirectUrl: null
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+      appConfig.profile = originalProfile;
+      appConfig.payment.mockEnabled = originalPaymentMock;
+      appConfig.payment.alipay = originalAlipay;
+    }
+  });
 });
 
 async function request(method, path, body = null, token = null, extraHeaders = {}) {
@@ -779,5 +908,13 @@ function parseJson(value) {
     return JSON.parse(value);
   } catch {
     return null;
+  }
+}
+
+function restoreEnv(key, value) {
+  if (value === undefined) {
+    delete process.env[key];
+  } else {
+    process.env[key] = value;
   }
 }

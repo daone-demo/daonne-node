@@ -85,8 +85,8 @@ export async function createPayment(userId, orderNo, body) {
     payType: body.payType,
     channelTransactionNo: null,
     status: "CREATED",
-    qrCodeContent: channelPayment?.qrCodeContent ?? (body.payType === "WECHAT" ? `weixin://wxpay/mock/${orderNo}` : null),
-    redirectUrl: channelPayment?.redirectUrl ?? (body.payType === "ALIPAY" ? `https://openapi.alipay.com/mock/${orderNo}` : null),
+    qrCodeContent: channelPayment.qrCodeContent,
+    redirectUrl: channelPayment.redirectUrl,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString()
   };
