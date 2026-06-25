@@ -94,6 +94,35 @@ describe("Daone Vercel Node API", () => {
     assert.ok(projectId);
     assert.equal(response.body.data.revision, 0);
 
+    response = await request("POST", "/api/v1/chat-sessions", { projectId, title: "商品图对话" }, token);
+    assert.equal(response.status, 200);
+    const chatSessionId = response.body.data.id;
+
+    response = await request("POST", `/api/v1/chat-sessions/${chatSessionId}/messages`, {
+      content: "帮我想一个白底运动鞋商品图提示词",
+      skillCode: "ECOMMERCE_IMAGE",
+      modelCode: "IMAGE_GENERAL_V1",
+      chatModelCode: "gpt5.5"
+    }, token);
+    assert.equal(response.status, 200);
+    assert.equal(response.body.data.message.role, "ASSISTANT");
+    assert.equal(response.body.data.message.content, "Daone mock response");
+    assert.deepEqual(response.body.data.generationTaskIds, []);
+
+    response = await request("GET", `/api/v1/chat-sessions/${chatSessionId}/messages`, null, token);
+    assert.equal(response.status, 200);
+    assert.equal(response.body.data.records.length, 2);
+    assert.equal(response.body.data.records[0].role, "USER");
+    assert.equal(response.body.data.records[1].content, "Daone mock response");
+
+    response = await request("POST", `/api/v1/chat-sessions/${chatSessionId}/messages`, {
+      content: "继续优化一下，不要太夸张",
+      skillCode: "ECOMMERCE_IMAGE",
+      modelCode: "IMAGE_GENERAL_V1"
+    }, token);
+    assert.equal(response.status, 200);
+    assert.equal(response.body.data.message.content, "Daone mock response");
+
     response = await request("GET", `/api/v1/projects/${projectId}/canvas`, null, token);
     assert.equal(response.status, 200);
     assert.equal(response.body.data.revision, 0);
