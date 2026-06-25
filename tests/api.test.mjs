@@ -6,10 +6,35 @@ process.env.DAONE_PROFILE = "local";
 process.env.DAONE_ADMIN_PHONES = "13800138000";
 const { handleRequest } = await import("../src/starter/app.js");
 const { default: vercelIndexHandler } = await import("../api/index.js");
-const { appConfig } = await import("../src/infrastructure/config/env.js");
+const { appConfig, resolveProfile } = await import("../src/infrastructure/config/env.js");
 const { createChannelPayment } = await import("../src/infrastructure/middleware/paymentClient.js");
 
 describe("Daone Vercel Node API", () => {
+  it("does not allow Vercel deployments to resolve to local profile", () => {
+    const originalProfile = process.env.DAONE_PROFILE;
+    const originalVercel = process.env.VERCEL;
+    const originalVercelEnv = process.env.VERCEL_ENV;
+    try {
+      process.env.DAONE_PROFILE = "local";
+      process.env.VERCEL_ENV = "preview";
+      assert.equal(resolveProfile(), "test");
+
+      process.env.VERCEL_ENV = "production";
+      assert.equal(resolveProfile(), "prod");
+
+      delete process.env.VERCEL_ENV;
+      process.env.VERCEL = "1";
+      assert.equal(resolveProfile(), "test");
+
+      delete process.env.VERCEL;
+      assert.equal(resolveProfile(), "local");
+    } finally {
+      restoreEnv("DAONE_PROFILE", originalProfile);
+      restoreEnv("VERCEL", originalVercel);
+      restoreEnv("VERCEL_ENV", originalVercelEnv);
+    }
+  });
+
   it("supports core frontend flow", async () => {
     let response = await request("POST", "/api/v1/auth/sms-codes", {
       phone: "13800138000",
@@ -859,5 +884,13 @@ function parseJson(value) {
     return JSON.parse(value);
   } catch {
     return null;
+  }
+}
+
+function restoreEnv(key, value) {
+  if (value === undefined) {
+    delete process.env[key];
+  } else {
+    process.env[key] = value;
   }
 }
