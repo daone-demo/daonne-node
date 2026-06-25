@@ -91,12 +91,13 @@ export function openApiSpec() {
           fileName: string("cover.png", "文件名"),
           contentType: string("image/png", "文件 MIME 类型"),
           fileSize: integer(128, "文件大小，单位字节")
-        }, "获取上传凭证请求", ["fileName", "contentType", "fileSize"]),
+        }, "上传完成后登记素材并返回 OSS URL 请求", ["fileName", "contentType", "fileSize"]),
         AssetCompleteUploadRequest: object({
-          uploadTicket: string("upt_xxx", "上传凭证"),
           projectId: string("100000000000000001", "项目 ID，可选"),
-          fileSize: integer(128, "文件大小，需与申请上传凭证时一致")
-        }, "确认上传请求", ["uploadTicket", "fileSize"]),
+          fileName: string("cover.png", "文件名"),
+          contentType: string("image/png", "文件 MIME 类型"),
+          fileSize: integer(128, "文件大小，单位字节")
+        }, "上传完成后登记素材并返回 OSS URL 请求", ["fileName", "contentType", "fileSize"]),
         PointEstimateRequest: object({
           capabilityCode: string("IMAGE_GENERAL_V1", "AI 能力编码"),
           parameters: object({
@@ -281,8 +282,8 @@ export function openApiSpec() {
       "/v1/projects/{projectId}/shares": { post: op("创建项目分享", { params: [projectIdParam()], body: "ShareCreateRequest" }) },
       "/v1/projects/{projectId}/shares/{shareCode}": { delete: op("关闭项目分享", { params: [projectIdParam(), pathParam("shareCode", "分享码")] }) },
       "/v1/shares/{shareCode}": { get: op("访问分享", { public: true, params: [pathParam("shareCode", "分享码")] }) },
-      "/v1/assets": { get: op("素材列表", { query: [queryParam("scope", "素材范围：FILES、CENTER、RECOMMENDED、FAVORITE"), queryParam("projectId", "项目 ID"), queryParam("type", "素材类型：IMAGE、VIDEO"), queryParam("source", "素材来源：UPLOAD、GENERATED、TEMPLATE"), queryParam("keyword", "文件名关键词"), ...pageParams()] }), post: op("确认上传", { body: "AssetCompleteUploadRequest" }) },
-      "/v1/assets/upload-tickets": { post: op("获取上传凭证", { body: "UploadTicketRequest" }) },
+      "/v1/assets": { get: op("素材列表", { query: [queryParam("scope", "素材范围：FILES、CENTER、RECOMMENDED、FAVORITE"), queryParam("projectId", "项目 ID"), queryParam("type", "素材类型：IMAGE、VIDEO"), queryParam("source", "素材来源：UPLOAD、GENERATED、TEMPLATE"), queryParam("keyword", "文件名关键词"), ...pageParams()] }), post: op("上传完成后登记素材并返回 OSS URL", { body: "AssetCompleteUploadRequest" }) },
+      "/v1/assets/upload-tickets": { post: op("上传完成后登记素材并返回 OSS URL", { body: "UploadTicketRequest" }) },
       "/v1/assets/{assetId}": { get: op("素材详情", { params: [assetIdParam()] }), delete: op("删除素材", { params: [assetIdParam()] }) },
       "/v1/assets/{assetId}/favorite": { put: op("收藏素材", { params: [assetIdParam()] }), delete: op("取消收藏素材", { params: [assetIdParam()] }) },
       "/v1/ai/capabilities": { get: op("AI 能力") },

@@ -243,20 +243,12 @@ describe("Daone Vercel Node API", () => {
       fileSize: 128
     }, token);
     assert.equal(response.status, 200);
-    assert.equal(response.body.data.uploadUrl, "/api/mock-files/upload");
-    const uploadTicket = response.body.data.uploadTicket;
+    assert.equal(response.body.data.source, "UPLOAD");
+    assert.match(response.body.data.url, /\/api\/mock-files\/image\/\d+\//);
 
     response = await request("GET", `/api/mock-files/${response.body.data.objectKey}`);
     assert.equal(response.status, 200);
     assert.match(response.rawBody, /Daone Mock File/);
-
-    response = await request("POST", "/api/v1/assets", {
-      uploadTicket,
-      projectId,
-      fileSize: 128
-    }, token);
-    assert.equal(response.status, 200);
-    assert.equal(response.body.data.source, "UPLOAD");
 
     response = await request("GET", "/api/v1/ai/capabilities", null, token);
     assert.equal(response.status, 200);
@@ -478,7 +470,7 @@ describe("Daone Vercel Node API", () => {
 
     const originalStorageMock = appConfig.storage.mockEnabled;
     appConfig.storage.mockEnabled = false;
-    response = await request("GET", "/api/mock-files/user/test.png");
+    response = await request("GET", "/api/mock-files/image/test.png");
     assert.equal(response.status, 404);
     response = await request("POST", "/api/mock-files/upload", {});
     assert.equal(response.status, 404);

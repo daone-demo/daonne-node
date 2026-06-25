@@ -15,31 +15,21 @@ export function createUploadTicket(userId, body) {
     requireProject(userId, body.projectId);
   }
   const extension = body.fileName.includes(".") ? body.fileName.slice(body.fileName.lastIndexOf(".")) : "";
-  const objectKey = `user/${userId}/${crypto.randomUUID()}${extension}`;
-  const uploadTicket = `upt_${crypto.randomUUID().replaceAll("-", "")}`;
-  const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
-  store.uploadTickets.set(uploadTicket, {
-    userId,
-    projectId: body.projectId ? String(body.projectId) : null,
+  const objectKey = `${type.toLowerCase()}/${userId}/${crypto.randomUUID()}${extension}`;
+  return createUploadedAsset(userId, {
+    projectId: body.projectId,
     fileName: body.fileName,
     contentType: body.contentType,
-    fileSize: Number(body.fileSize),
+    fileSize: body.fileSize,
     type,
-    objectKey,
-    expiresAt
+    objectKey
   });
-  const uploadTarget = createUploadTarget(objectKey, body.contentType, expiresAt);
-  return {
-    uploadTicket,
-    uploadMethod: uploadTarget.uploadMethod,
-    uploadUrl: uploadTarget.uploadUrl,
-    objectKey,
-    formFields: uploadTarget.formFields,
-    expiresAt
-  };
 }
 
 export async function completeUpload(userId, body) {
+  if (!body.uploadTicket) {
+    return createUploadTicket(userId, body);
+  }
   const ticket = store.uploadTickets.get(body.uploadTicket);
   if (!ticket || ticket.userId !== userId) {
     throw badRequest("UPLOAD_TICKET_INVALID", "上传凭证无效");
@@ -78,6 +68,38 @@ export async function completeUpload(userId, body) {
   store.assets.set(id, asset);
   store.uploadTickets.delete(body.uploadTicket);
   return toAssetView(asset, userId);
+}
+
+async function createUploadedAsset(userId, upload) {
+  const id = nextId();
+  const t = new Date().toISOString();
+  const asset = {
+    id,
+    userId,
+    projectId: upload.projectId ? String(upload.projectId) : null,
+    type: upload.type,
+    source: "UPLOAD",
+    fileName: upload.fileName,
+    objectKey: upload.objectKey,
+    contentType: upload.contentType,
+    fileSize: Number(upload.fileSize),
+    width: null,
+    height: null,
+    durationSeconds: null,
+    reviewStatus: "REVIEWING",
+    previewUrl: publicObjectUrl(upload.objectKey),
+    createdAt: t,
+    updatedAt: t
+  };
+  const review = await safeReviewAsset(asset);
+  asset.reviewStatus = review.status;
+  store.assets.set(id, asset);
+  const view = toAssetView(asset, userId);
+  return {
+    ...view,
+    url: asset.previewUrl,
+    objectKey: asset.objectKey
+  };
 }
 
 export function listAssets(userId, query) {
@@ -169,21 +191,6 @@ async function safeReviewAsset(asset) {
   }
 }
 
-function createUploadTarget(objectKey, contentType, expiresAt) {
-  if (appConfig.storage.mockEnabled) {
-    return {
-      uploadMethod: "POST",
-      uploadUrl: "/api/mock-files/upload",
-      formFields: { key: objectKey }
-    };
-  }
-  return {
-    uploadMethod: "PUT",
-    uploadUrl: signedOssPutUrl(objectKey, contentType, expiresAt),
-    formFields: { "Content-Type": contentType }
-  };
-}
-
 function publicObjectUrl(objectKey) {
   if (appConfig.storage.publicBaseUrl) {
     return joinUrl(appConfig.storage.publicBaseUrl, objectKey);
@@ -198,22 +205,6 @@ function ossObjectUrl(objectKey) {
     return joinUrl(appConfig.storage.publicBaseUrl || "/api/mock-files", objectKey);
   }
   return `https://${bucket}.${endpoint}/${encodeObjectKey(objectKey)}`;
-}
-
-function signedOssPutUrl(objectKey, contentType, expiresAt) {
-  const expires = Math.floor(new Date(expiresAt).getTime() / 1000);
-  const resource = `/${appConfig.storage.oss.bucket}/${objectKey}`;
-  const stringToSign = ["PUT", "", contentType, expires, resource].join("\n");
-  const signature = crypto
-    .createHmac("sha1", appConfig.aliyun.accessKeySecret)
-    .update(stringToSign)
-    .digest("base64");
-  const params = new URLSearchParams({
-    OSSAccessKeyId: appConfig.aliyun.accessKeyId,
-    Expires: String(expires),
-    Signature: signature
-  });
-  return `${ossObjectUrl(objectKey)}?${params.toString()}`;
 }
 
 function joinUrl(baseUrl, objectKey) {
