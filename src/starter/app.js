@@ -1,6 +1,6 @@
 import { Router } from "../service/common/router.js";
 import { appConfig, configHealth } from "../infrastructure/config/env.js";
-import { readJson, parsePage, paginate } from "../service/common/http.js";
+import { readBody, parsePage, paginate } from "../service/common/http.js";
 import { pageResponse, sendError, sendJson, sendNoContent, success, traceId } from "../service/common/response.js";
 import { forbidden, notFound, unauthorized } from "../service/common/errors.js";
 import * as auth from "../service/auth/authService.js";
@@ -241,7 +241,7 @@ export async function handleRequest(req, res) {
     if (matched.options.admin && !hasRole(user.role, "ADMIN")) {
       throw forbidden();
     }
-    const body = ["POST", "PUT", "PATCH"].includes(req.method) ? await readJson(req) : {};
+    const body = ["POST", "PUT", "PATCH"].includes(req.method) ? await readBody(req) : {};
     const result = await matched.handler({ req, url, params: matched.params, body, user, token });
     if (["POST", "PUT", "PATCH", "DELETE"].includes(req.method)) {
       await persistRuntimeStore();

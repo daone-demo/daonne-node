@@ -31,8 +31,8 @@
 | 分享 | `POST /api/v1/projects/:projectId/shares` | 创建项目只读分享链接。 | 画布页/项目操作菜单 - 分享。 |
 | 分享 | `GET /api/v1/shares/:shareCode` | 公开访问分享内容，返回项目标题、只读画布、素材预览地址。 | 分享落地页/外部访问的只读画布页。 |
 | 分享 | `DELETE /api/v1/projects/:projectId/shares/:shareCode` | 关闭项目分享链接。 | 画布页/项目操作菜单 - 取消分享/关闭分享。 |
-| 素材 | `POST /api/v1/assets/upload-tickets` | 上传完成后登记素材并直接返回 OSS URL，同时触发/记录内容安全状态。 | 画布页上传图片/视频/文件、素材页上传入口、聊天附件上传完成。 |
-| 素材 | `POST /api/v1/assets` | 与 upload-tickets 功能合并的兼容入口，上传完成后登记素材并返回 OSS URL。 | 画布页上传完成、素材页上传完成、聊天附件上传完成。 |
+| 素材 | `POST /api/v1/assets/upload-tickets` | 接收本地文件，后端上传到 OSS 后登记素材并直接返回 OSS URL，同时触发/记录内容安全状态。 | 画布页上传图片/视频/文件、素材页上传入口、聊天附件上传完成。 |
+| 素材 | `POST /api/v1/assets` | 与 upload-tickets 功能合并的兼容入口，接收本地文件并上传 OSS 后返回 URL。 | 画布页上传完成、素材页上传完成、聊天附件上传完成。 |
 | 素材 | `GET /api/v1/assets` | 查询素材列表，支持 scope/type/source/keyword/projectId 筛选。 | 项目/素材页 - 智能推荐、素材中心、我的素材、我的收藏、我的文件；画布页素材面板。 |
 | 素材 | `GET /api/v1/assets/:assetId` | 获取素材元数据、预览地址、下载地址。 | 素材详情弹窗、画布节点预览、单个素材下载。 |
 | 素材 | `PUT /api/v1/assets/:assetId/favorite` | 收藏素材。 | 素材卡片/素材详情 - 收藏。 |

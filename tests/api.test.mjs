@@ -59,6 +59,55 @@ describe("Daone Vercel Node API", () => {
     }
   });
 
+  it("uploads assets to OSS when storage mock is disabled", async () => {
+    const { createUploadTicket } = await import("../src/service/creation/assetService.js");
+    const originalFetch = globalThis.fetch;
+    const originalStorageMock = appConfig.storage.mockEnabled;
+    const originalPublicBaseUrl = appConfig.storage.publicBaseUrl;
+    const originalOss = { ...appConfig.storage.oss };
+    const originalAliyun = { ...appConfig.aliyun };
+    const originalContentSafetyMock = appConfig.contentSafety.mockEnabled;
+    const uploaded = Buffer.from("real oss payload");
+    let putObjectCalled = false;
+    try {
+      appConfig.storage.mockEnabled = false;
+      appConfig.storage.publicBaseUrl = "https://cdn.example.com";
+      appConfig.storage.oss.endpoint = "oss-cn-shanghai.aliyuncs.com";
+      appConfig.storage.oss.bucket = "daone-test";
+      appConfig.aliyun.accessKeyId = "ak-test";
+      appConfig.aliyun.accessKeySecret = "sk-test";
+      appConfig.contentSafety.mockEnabled = true;
+      globalThis.fetch = async (url, options) => {
+        putObjectCalled = true;
+        assert.equal(options.method, "PUT");
+        assert.match(url, /^https:\/\/daone-test\.oss-cn-shanghai\.aliyuncs\.com\/image\/oss-user\/[0-9a-f-]{36}\.png$/);
+        assert.equal(options.headers["Content-Type"], "image/png");
+        assert.equal(options.headers["Content-Length"], String(uploaded.length));
+        assert.match(options.headers.Authorization, /^OSS ak-test:/);
+        assert.equal(Buffer.compare(options.body, uploaded), 0);
+        return new Response("", { status: 200 });
+      };
+      const asset = await createUploadTicket("oss-user", {
+        fileName: "photo.png",
+        contentType: "image/png",
+        fileContent: uploaded.toString("base64")
+      });
+      assert.equal(putObjectCalled, true);
+      assert.match(asset.objectKey, /^image\/oss-user\/[0-9a-f-]{36}\.png$/);
+      assert.equal(asset.url, `https://cdn.example.com/${asset.objectKey}`);
+      assert.equal(asset.source, "UPLOAD");
+      assert.equal(asset.status, "AVAILABLE");
+    } finally {
+      globalThis.fetch = originalFetch;
+      appConfig.storage.mockEnabled = originalStorageMock;
+      appConfig.storage.publicBaseUrl = originalPublicBaseUrl;
+      appConfig.storage.oss = originalOss;
+      appConfig.aliyun.accessKeyId = originalAliyun.accessKeyId;
+      appConfig.aliyun.accessKeySecret = originalAliyun.accessKeySecret;
+      appConfig.contentSafety.mockEnabled = originalContentSafetyMock;
+    }
+  });
+
   it("supports core frontend flow", async () => {
     let response = await request("POST", "/api/v1/auth/sms-codes", {
       phone: "13800138000",
@@ -236,11 +285,13 @@ describe("Daone Vercel Node API", () => {
     assert.equal(response.status, 200);
     assert.equal(response.body.data.project.id, projectId);
 
-    response = await request("POST", "/api/v1/assets/upload-tickets", {
+    response = await requestMultipart("POST", "/api/v1/assets/upload-tickets", {
       projectId,
-      fileName: "cover.png",
-      contentType: "image/png",
-      fileSize: 128
+      file: {
+        fileName: "cover.png",
+        contentType: "image/png",
+        content: Buffer.from("mock image")
+      }
     }, token);
     assert.equal(response.status, 200);
     assert.equal(response.body.data.source, "UPLOAD");
@@ -837,6 +888,18 @@ async function request(method, path, body = null, token = null, extraHeaders = {
   };
 }
 
+async function requestMultipart(method, path, body, token = null) {
+  const req = makeMultipartReq(method, path, body, token);
+  const res = makeRes();
+  await handleRequest(req, res);
+  return {
+    status: res.statusCode,
+    body: parseJson(res.body),
+    rawBody: res.body,
+    headers: res.headers
+  };
+}
+
 async function requestViaVercelIndex(method, path, body = null, token = null, extraHeaders = {}) {
   const req = makeReq(method, rewrittenIndexPath(path), body, token, extraHeaders);
   const res = makeRes();
@@ -846,6 +909,41 @@ async function requestViaVercelIndex(method, path, body = null, token = null, ex
     body: parseJson(res.body),
     rawBody: res.body,
     headers: res.headers
+  };
+}
+
+function makeMultipartReq(method, path, body, token) {
+  const boundary = `----daone-test-${crypto.randomUUID()}`;
+  const chunks = [];
+  for (const [name, value] of Object.entries(body)) {
+    if (value && Buffer.isBuffer(value.content)) {
+      chunks.push(Buffer.from(`--${boundary}\r\n`));
+      chunks.push(Buffer.from(`Content-Disposition: form-data; name="${name}"; filename="${value.fileName}"\r\n`));
+      chunks.push(Buffer.from(`Content-Type: ${value.contentType}\r\n\r\n`));
+      chunks.push(value.content);
+      chunks.push(Buffer.from("\r\n"));
+    } else {
+      chunks.push(Buffer.from(`--${boundary}\r\n`));
+      chunks.push(Buffer.from(`Content-Disposition: form-data; name="${name}"\r\n\r\n`));
+      chunks.push(Buffer.from(String(value)));
+      chunks.push(Buffer.from("\r\n"));
+    }
+  }
+  chunks.push(Buffer.from(`--${boundary}--\r\n`));
+  const payload = Buffer.concat(chunks);
+  const headers = {
+    host: "localhost:8080",
+    "content-type": `multipart/form-data; boundary=${boundary}`,
+    "content-length": String(payload.length)
+  };
+  if (token) headers.authorization = `Bearer ${token}`;
+  return {
+    method,
+    url: path,
+    headers,
+    async *[Symbol.asyncIterator]() {
+      yield payload;
+    }
   };
 }
 
