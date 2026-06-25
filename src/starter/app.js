@@ -107,7 +107,7 @@ router.post("/api/v1/provider/videos/generations", async ({ body }) => {
   }
   return rawJson(await modelClient.createVideoGeneration(body));
 });
-router.get("/api/v1/provider/tools", async () => ({ items: modelClient.supportedModelTools() }));
+router.get("/api/v1/provider/tools", async () => modelClient.supportedModelTools());
 router.post("/api/v1/provider/tools/:toolCode", async ({ params, body }) => rawJson(await modelClient.callModelTool(params.toolCode, body)));
 
 router.post("/api/v1/chat-sessions", async ({ user, body }) => chatService.createSession(user.id, body));

@@ -57,16 +57,218 @@ const VIDEO_MODEL_ALIASES = {
   happyhorse: "happyHorse"
 };
 
-const TOOL_PATHS = {
-  "remove-background": appConfig.model.tools.removeBackground,
-  eraser: appConfig.model.tools.eraser,
-  "expand-image": appConfig.model.tools.expandImage,
-  "increase-resolution": appConfig.model.tools.increaseResolution,
-  "image-to-3d": appConfig.model.tools.imageTo3d,
-  "prompt-expert": appConfig.model.tools.promptExpert,
-  "product-image-replacement": appConfig.model.tools.productImageReplacement,
-  "pose-transfer": appConfig.model.tools.poseTransfer,
-  "topaz-enhance": appConfig.model.tools.topazEnhance
+const TOOL_DEFINITIONS = [
+  { code: "remove-background", label: "抠图", type: "image", category: "image-edit", path: appConfig.model.tools.removeBackground },
+  { code: "eraser", label: "擦除", type: "image", category: "image-edit", path: appConfig.model.tools.eraser },
+  { code: "expand-image", label: "扩图", type: "image", category: "image-edit", path: appConfig.model.tools.expandImage },
+  { code: "increase-resolution", label: "图片高清", type: "image", category: "image-enhance", path: appConfig.model.tools.increaseResolution },
+  { code: "image-to-3d", label: "图片转 3D", type: "image", category: "image-generate", path: appConfig.model.tools.imageTo3d },
+  { code: "prompt-expert", label: "图片反推提示词", type: "text", category: "text-generate", path: appConfig.model.tools.promptExpert },
+  { code: "product-image-replacement", label: "商品图替换", type: "image", category: "image-edit", path: appConfig.model.tools.productImageReplacement },
+  { code: "pose-transfer", label: "人物姿态变换", type: "image", category: "image-edit", path: appConfig.model.tools.poseTransfer },
+  { code: "topaz-enhance", label: "画质增强", type: "image", category: "image-enhance", path: appConfig.model.tools.topazEnhance }
+];
+
+const TOOL_PATHS = Object.fromEntries(TOOL_DEFINITIONS.map((tool) => [tool.code, tool.path]));
+
+const TOOL_UI = {
+  textPickerActions: [
+    { key: "write", label: "自己编写内容", icon: "doc", type: "local" },
+    { key: "text2video", label: "文生视频", icon: "play", type: "generation", endpoint: "/api/v1/provider/videos/generations" },
+    { key: "img2prompt", label: "图片反推提示词", icon: "image", type: "provider", toolCode: "prompt-expert" }
+  ],
+  imageGenActions: [
+    { key: "img2img", label: "图生图", icon: "img2img", type: "generation", endpoint: "/api/v1/provider/images/generations" },
+    { key: "hd", label: "图片高清", icon: "hd", type: "provider", toolCode: "increase-resolution" }
+  ],
+  imageNodeToolbar: {
+    chat: { key: "chat", label: "对话", icon: "chat", type: "local" },
+    actions: [
+      {
+        key: "cutout",
+        label: "抠图",
+        icon: "cutout",
+        type: "menu",
+        menuKey: "imageCutoutModes",
+        children: [
+          { key: "quick", code: "cutout.quick", label: "快速", type: "provider", toolCode: "remove-background" },
+          { key: "precise", code: "cutout.precise", label: "精准", type: "provider", toolCode: "remove-background" },
+          { key: "eraser", code: "cutout.eraser", label: "擦除", type: "provider", toolCode: "eraser" }
+        ]
+      },
+      { key: "hd", label: "HD 高清", type: "provider", toolCode: "increase-resolution" },
+      {
+        key: "crop",
+        label: "裁剪",
+        icon: "crop",
+        type: "menu",
+        menuKey: "imageCropAspectRatios",
+        children: [
+          { key: "free", code: "crop.free", label: "自由裁剪", type: "local", ratio: null },
+          { key: "original", code: "crop.original", label: "原图比例", type: "local", ratio: "original" },
+          { key: "1:1", code: "crop.1:1", label: "1:1", type: "local", ratio: 1 },
+          { key: "4:3", code: "crop.4:3", label: "4:3", type: "local", ratio: 4 / 3 },
+          { key: "3:4", code: "crop.3:4", label: "3:4", type: "local", ratio: 3 / 4 },
+          { key: "16:9", code: "crop.16:9", label: "16:9", type: "local", ratio: 16 / 9 },
+          { key: "9:16", code: "crop.9:16", label: "9:16", type: "local", ratio: 9 / 16 },
+          { key: "3:2", code: "crop.3:2", label: "3:2", type: "local", ratio: 3 / 2 },
+          { key: "2:3", code: "crop.2:3", label: "2:3", type: "local", ratio: 2 / 3 }
+        ]
+      },
+      { key: "inpaint", label: "局部修改", icon: "edit", type: "provider", toolCode: "product-image-replacement" },
+      { key: "preview", label: "预览", icon: "preview", type: "local" },
+      { key: "addToDialog", label: "", icon: "addToDialog", type: "local" },
+      { key: "more", label: "更多", icon: "more", type: "menu", menuKey: "imageNodeToolbarMoreMenu" }
+    ]
+  },
+  imageNodeToolbarMore: {
+    actions: [
+      {
+        key: "split",
+        label: "拆图",
+        icon: "split",
+        type: "menu",
+        children: [
+          { key: "grid-4", code: "split.grid-4", label: "4宫格", type: "local" },
+          { key: "grid-9", code: "split.grid-9", label: "9宫格", type: "local" },
+          { key: "free", code: "split.free", label: "自由", type: "local" }
+        ]
+      },
+      { key: "annotate", label: "标注", icon: "annotate", type: "local" },
+      {
+        key: "decompose",
+        label: "元素拆解",
+        icon: "decompose",
+        type: "menu",
+        children: [
+          { key: "all", code: "decompose.all", label: "全部", type: "local" },
+          { key: "single", code: "decompose.single", label: "单个", type: "local" }
+        ]
+      },
+      {
+        key: "erase",
+        label: "消除",
+        icon: "erase",
+        type: "menu",
+        children: [
+          { key: "smart", code: "erase.smart", label: "智能", type: "provider", toolCode: "eraser" },
+          { key: "quick", code: "erase.quick", label: "快速", type: "provider", toolCode: "eraser" }
+        ]
+      },
+      {
+        key: "search",
+        label: "搜同款",
+        icon: "search",
+        type: "menu",
+        children: [
+          { key: "same", code: "search.same", label: "同款", type: "local" },
+          { key: "similar", code: "search.similar", label: "类似", type: "local" }
+        ]
+      },
+      { key: "parse", label: "解析", icon: "parse", type: "provider", toolCode: "prompt-expert" },
+      { key: "more", label: "更多", icon: "more", type: "menu", menuKey: "imageNodeToolbarMoreMenu" }
+    ]
+  },
+  imageNodeCreativeToolbar: {
+    actions: [
+      { key: "panorama", label: "全景", badge: "NEW", type: "provider", toolCode: "expand-image" },
+      { key: "multi-angle", label: "多角度", type: "provider", toolCode: "image-to-3d" },
+      { key: "lighting", label: "打光", type: "local" },
+      { key: "grid", label: "九宫格", type: "local" },
+      { key: "hd", label: "高清", type: "provider", toolCode: "topaz-enhance" },
+      { key: "grid-split", label: "宫格切分", type: "local" }
+    ],
+    icons: [
+      { key: "rotate", label: "旋转", icon: "rotate", type: "local" },
+      { key: "flip", label: "翻转", icon: "flip", type: "local" },
+      { key: "download", label: "下载", icon: "download", type: "local" },
+      { key: "expand", label: "展开", icon: "expand", type: "local" }
+    ]
+  },
+  imageNodeToolbarMoreMenu: [
+    { key: "expand", label: "扩图", icon: "expand", type: "provider", toolCode: "expand-image" },
+    { key: "restore", label: "细节还原", icon: "restore", type: "provider", toolCode: "topaz-enhance" },
+    { key: "perspective", label: "多视角", icon: "perspective", type: "provider", toolCode: "image-to-3d" },
+    { key: "text-edit", label: "编辑文字", icon: "text-edit", type: "local" },
+    {
+      key: "adjust",
+      label: "调节",
+      icon: "adjust",
+      hasSubmenu: true,
+      type: "menu",
+      children: [
+        { key: "brightness", code: "adjust.brightness", label: "亮度", type: "local" },
+        { key: "contrast", code: "adjust.contrast", label: "对比度", type: "local" },
+        { key: "saturation", code: "adjust.saturation", label: "饱和度", type: "local" },
+        { key: "sharpness", code: "adjust.sharpness", label: "锐化", type: "local" }
+      ]
+    },
+    { key: "layers", label: "图层分离", icon: "layers", type: "local" },
+    {
+      key: "svg",
+      label: "矢量SVG",
+      icon: "svg",
+      hasSubmenu: true,
+      type: "menu",
+      children: [
+        { key: "vectorize", code: "svg.vectorize", label: "矢量化", type: "local" },
+        { key: "download", code: "svg.download", label: "下载 SVG", type: "local" }
+      ]
+    },
+    { key: "customize", label: "自定义", icon: "customize", type: "local" }
+  ],
+  imageCutoutModes: [
+    { key: "quick", code: "cutout.quick", label: "快速", type: "provider", toolCode: "remove-background" },
+    { key: "precise", code: "cutout.precise", label: "精准", type: "provider", toolCode: "remove-background" },
+    { key: "eraser", code: "cutout.eraser", label: "擦除", type: "provider", toolCode: "eraser" }
+  ],
+  imageCropAspectRatios: [
+    { key: "free", code: "crop.free", label: "自由裁剪", type: "local", ratio: null },
+    { key: "original", code: "crop.original", label: "原图比例", type: "local", ratio: "original" },
+    { key: "1:1", code: "crop.1:1", label: "1:1", type: "local", ratio: 1 },
+    { key: "4:3", code: "crop.4:3", label: "4:3", type: "local", ratio: 4 / 3 },
+    { key: "3:4", code: "crop.3:4", label: "3:4", type: "local", ratio: 3 / 4 },
+    { key: "16:9", code: "crop.16:9", label: "16:9", type: "local", ratio: 16 / 9 },
+    { key: "9:16", code: "crop.9:16", label: "9:16", type: "local", ratio: 9 / 16 },
+    { key: "3:2", code: "crop.3:2", label: "3:2", type: "local", ratio: 3 / 2 },
+    { key: "2:3", code: "crop.2:3", label: "2:3", type: "local", ratio: 2 / 3 }
+  ],
+  imageToolbarMoreHover: {
+    split: {
+      menu: ["4宫格", "9宫格", "自由"],
+      children: [
+        { key: "grid-4", code: "split.grid-4", label: "4宫格", type: "local" },
+        { key: "grid-9", code: "split.grid-9", label: "9宫格", type: "local" },
+        { key: "free", code: "split.free", label: "自由", type: "local" }
+      ]
+    },
+    annotate: { tooltip: "标注" },
+    decompose: {
+      tooltip: "图层分离",
+      menu: ["全部", "单个"],
+      children: [
+        { key: "all", code: "decompose.all", label: "全部", type: "local" },
+        { key: "single", code: "decompose.single", label: "单个", type: "local" }
+      ]
+    },
+    erase: {
+      tooltip: "消除",
+      menu: ["智能", "快速"],
+      children: [
+        { key: "smart", code: "erase.smart", label: "智能", type: "provider", toolCode: "eraser" },
+        { key: "quick", code: "erase.quick", label: "快速", type: "provider", toolCode: "eraser" }
+      ]
+    },
+    search: {
+      tooltip: "搜同款",
+      menu: ["同款", "类似"],
+      children: [
+        { key: "same", code: "search.same", label: "同款", type: "local" },
+        { key: "similar", code: "search.similar", label: "类似", type: "local" }
+      ]
+    },
+    parse: { tooltip: "解析" }
+  }
 };
 
 export async function createProviderGenerationTask(task, capability) {
@@ -234,10 +436,37 @@ export async function callModelTool(toolCode, body = {}) {
 }
 
 export function supportedModelTools() {
-  return Object.entries(TOOL_PATHS).map(([code, path]) => ({
-    code,
-    configured: Boolean(path)
-  }));
+  return {
+    items: TOOL_DEFINITIONS.map((tool) => serializeTool(tool)),
+    toolbars: withToolConfiguration(TOOL_UI)
+  };
+}
+
+function serializeTool(tool) {
+  return {
+    code: tool.code,
+    label: tool.label,
+    type: tool.type,
+    category: tool.category,
+    configured: Boolean(tool.path)
+  };
+}
+
+function withToolConfiguration(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => withToolConfiguration(item));
+  }
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+  const output = {};
+  for (const [key, child] of Object.entries(value)) {
+    output[key] = withToolConfiguration(child);
+  }
+  if (typeof output.toolCode === "string") {
+    output.configured = Boolean(TOOL_PATHS[output.toolCode]);
+  }
+  return output;
 }
 
 function normalizeStatus(status) {

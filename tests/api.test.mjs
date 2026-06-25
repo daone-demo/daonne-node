@@ -301,6 +301,17 @@ describe("Daone Vercel Node API", () => {
     response = await request("GET", "/api/v1/provider/tools", null, token);
     assert.equal(response.status, 200);
     assert.ok(response.body.data.items.some((item) => item.code === "remove-background"));
+    assert.equal(response.body.data.items.find((item) => item.code === "remove-background").label, "抠图");
+    assert.equal(response.body.data.toolbars.imageNodeToolbar.actions[0].key, "cutout");
+    assert.equal(response.body.data.toolbars.imageNodeToolbar.actions[0].children[0].code, "cutout.quick");
+    assert.equal(response.body.data.toolbars.imageNodeToolbar.actions[0].children[0].toolCode, "remove-background");
+    assert.equal(response.body.data.toolbars.imageNodeToolbar.actions[0].children[2].code, "cutout.eraser");
+    assert.equal(response.body.data.toolbars.imageNodeToolbar.actions[2].children[0].code, "crop.free");
+    assert.equal(response.body.data.toolbars.imageNodeToolbarMore.actions[0].children[1].code, "split.grid-9");
+    assert.equal(response.body.data.toolbars.imageNodeToolbarMore.actions[3].children[0].code, "erase.smart");
+    assert.equal(response.body.data.toolbars.imageNodeToolbarMore.actions[3].children[0].toolCode, "eraser");
+    assert.equal(response.body.data.toolbars.imageNodeToolbarMoreMenu[4].children[0].code, "adjust.brightness");
+    assert.equal(response.body.data.toolbars.imageCutoutModes[2].toolCode, "eraser");
 
     response = await request("POST", "/api/v1/provider/tools/remove-background", {
       imageUrl: "https://example.com/a.png"
