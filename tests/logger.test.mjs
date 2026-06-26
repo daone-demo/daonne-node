@@ -71,6 +71,23 @@ describe("structured logger", () => {
     assert.equal(entry.code, "PAYMENT_FAILED");
     assert.equal(entry.productCode, "TEAM_MONTH");
   });
+
+  it("keeps reserved log fields stable", async () => {
+    const lines = await captureLogs(async () => {
+      createLogger("error").error("error.handled", "Stable log message", {
+        message: "business field must not override",
+        level: "debug",
+        category: "business",
+        event: "business.event"
+      });
+    });
+
+    const entry = JSON.parse(lines.stderr[0]);
+    assert.equal(entry.level, "error");
+    assert.equal(entry.category, "error");
+    assert.equal(entry.event, "error.handled");
+    assert.equal(entry.message, "Stable log message");
+  });
 });
 
 async function captureLogs(callback) {

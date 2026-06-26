@@ -5,12 +5,15 @@ import { nextId } from "../../infrastructure/common/id.js";
 import { badGateway, badRequest, forbidden, notFound } from "../common/errors.js";
 import { requireProject } from "./projectService.js";
 import { reviewAsset } from "../../infrastructure/middleware/contentSafetyClient.js";
+import { createLogger, errorFields } from "../../infrastructure/common/logger.js";
 
 const MB = 1024 * 1024;
 const MAX_UPLOAD_SIZE_BY_TYPE = {
   IMAGE: 10 * MB,
   VIDEO: 50 * MB
 };
+const storageLog = createLogger("storage");
+const contentSafetyLog = createLogger("content_safety");
 
 export async function createUploadTicket(userId, body) {
   const upload = normalizeUploadBody(body);
@@ -106,23 +109,55 @@ async function uploadObjectToStorage(upload) {
     if (!isLocalRuntime()) {
       throw badGateway("STORAGE_MOCK_NOT_ALLOWED", "Storage mock 仅允许本地环境使用");
     }
+    storageLog.debug("storage.upload_mocked", "Storage upload skipped in local mock", {
+      objectKey: upload.objectKey,
+      contentType: upload.contentType,
+      fileSize: upload.fileSize,
+      type: upload.type
+    });
     return;
   }
   if (!upload.content) {
     throw badRequest("FILE_REQUIRED", "请上传文件内容");
   }
-  const response = await fetch(ossUploadObjectUrl(upload.objectKey), {
-    method: "PUT",
-    headers: ossPutObjectHeaders(upload),
-    body: upload.content
-  });
+  let response;
+  try {
+    response = await fetch(ossUploadObjectUrl(upload.objectKey), {
+      method: "PUT",
+      headers: ossPutObjectHeaders(upload),
+      body: upload.content
+    });
+  } catch (error) {
+    storageLog.error("storage.upload_failed", "OSS upload request failed", {
+      objectKey: upload.objectKey,
+      contentType: upload.contentType,
+      fileSize: upload.fileSize,
+      type: upload.type,
+      ...errorFields(error)
+    });
+    throw error;
+  }
   if (!response.ok) {
     const responseBody = await response.text().catch(() => "");
+    storageLog.error("storage.upload_failed", "OSS upload failed", {
+      objectKey: upload.objectKey,
+      contentType: upload.contentType,
+      fileSize: upload.fileSize,
+      type: upload.type,
+      httpStatus: response.status,
+      reason: responseBody.slice(0, 500)
+    });
     throw badGateway("OSS_UPLOAD_ERROR", "OSS 文件上传失败", {
       status: response.status,
       reason: responseBody.slice(0, 500)
     });
   }
+  storageLog.info("storage.upload_succeeded", "OSS upload succeeded", {
+    objectKey: upload.objectKey,
+    contentType: upload.contentType,
+    fileSize: upload.fileSize,
+    type: upload.type
+  });
 }
 
 function isLocalRuntime() {
@@ -221,6 +256,13 @@ async function safeReviewAsset(asset) {
   try {
     return await reviewAsset(asset);
   } catch (error) {
+    contentSafetyLog.error("content_safety.review_failed", "Content safety review failed", {
+      assetId: asset.id,
+      objectKey: asset.objectKey,
+      contentType: asset.contentType,
+      type: asset.type,
+      ...errorFields(error)
+    });
     throw badGateway("CONTENT_SAFETY_ERROR", "内容安全服务异常", { reason: error.message });
   }
 }

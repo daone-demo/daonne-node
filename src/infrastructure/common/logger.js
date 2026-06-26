@@ -59,12 +59,12 @@ export const logger = {
 export function errorFields(error) {
   if (!error) return {};
   return {
-    name: error.name,
-    message: error.message,
-    stack: error.stack,
-    code: error.code,
-    status: error.status,
-    data: error.data
+    errorName: error.name,
+    errorMessage: error.message,
+    errorStack: error.stack,
+    errorCode: error.code,
+    errorStatus: error.status,
+    errorData: error.data
   };
 }
 
@@ -72,13 +72,13 @@ function writeLog(level, category, event, message, fields = {}) {
   const normalizedLevel = normalizeLevel(level);
   if (!shouldLog(normalizedLevel)) return;
   const entry = sanitize({
+    ...getLogContext(),
+    ...fields,
     time: new Date().toISOString(),
     level: normalizedLevel,
     category,
     event,
-    message,
-    ...getLogContext(),
-    ...fields
+    message
   });
   const line = `${JSON.stringify(entry)}\n`;
   if (normalizedLevel === "error" || normalizedLevel === "warn") {

@@ -1294,7 +1294,7 @@ export function docsHtml() {
 
     function renderBody(operation) {
       const body = operation.requestBody?.content?.["application/json"]?.schema;
-      if (!body) return '<p class="desc">无请求体。</p>';
+      if (!body) return '<p class="desc">无请求示例。</p>';
       return '<div class="grid"><div><table><thead><tr><th>Content-Type</th><th>模型</th><th>必填</th></tr></thead><tbody><tr><td>application/json</td><td><code>' + escapeHtml(schemaLabel(body)) + '</code></td><td>' + (operation.requestBody.required ? "是" : "否") + '</td></tr></tbody></table></div><pre>' + escapeHtml(JSON.stringify(schemaExample(body), null, 2)) + '</pre></div>';
     }
 
@@ -1356,14 +1356,16 @@ export function docsHtml() {
         document.getElementById("docs-view").innerHTML = '<section class="section"><div class="empty">请选择一个接口。</div></section>';
         return;
       }
+      const requestExampleSection = item.operation.requestBody
+        ? '<section class="section"><div class="section-header"><span class="section-title">请求示例</span></div><div class="section-body">' + renderBody(item.operation) + '</div></section>'
+        : "";
       document.getElementById("docs-view").innerHTML =
         '<section class="section"><div class="section-header"><div class="endpoint-title"><span class="method ' + escapeHtml(item.method) + '">' + methodNames[item.method] + '</span><span class="section-title">' + escapeHtml(item.summary) + '</span><span class="endpoint-path">' + escapeHtml(item.path) + '</span></div></div>' +
         '<div class="section-body"><p class="desc">' + escapeHtml(item.operation.description || "接口基础信息、请求参数和响应结构。") + '</p></div></section>' +
-        '<section class="section"><div class="section-header"><span class="section-title">请求参数</span></div><div class="section-body">' + renderParameters(item.operation.parameters || []) + '</div></section>' +
-        '<section class="section"><div class="section-header"><span class="section-title">请求体</span></div><div class="section-body">' + renderBody(item.operation) + '</div></section>' +
-        '<section class="section"><div class="section-header"><span class="section-title">入参字段</span></div><div class="section-body">' + renderFieldTable(requestFieldRows(item.operation), "无入参字段。") + '</div></section>' +
-        '<section class="section"><div class="section-header"><span class="section-title">出参字段</span></div><div class="section-body">' + renderFieldTable(responseFieldRows(item.operation), "无出参字段。", false) + '</div></section>' +
-        '<section class="section"><div class="section-header"><span class="section-title">data 字段</span></div><div class="section-body">' + renderFieldTable(dataFieldRows(item.operation), "暂无 data 字段定义。", false) + '</div></section>' +
+        '<section class="section"><div class="section-header"><span class="section-title">请求参数</span></div><div class="section-body">' + renderFieldTable(requestFieldRows(item.operation), "无请求参数。") + '</div></section>' +
+        requestExampleSection +
+        '<section class="section"><div class="section-header"><span class="section-title">响应字段</span></div><div class="section-body">' + renderFieldTable(responseFieldRows(item.operation), "无响应字段。", false) + '</div></section>' +
+        '<section class="section"><div class="section-header"><span class="section-title">data 字段明细</span></div><div class="section-body">' + renderFieldTable(dataFieldRows(item.operation), "暂无 data 字段定义。", false) + '</div></section>' +
         '<section class="section"><div class="section-header"><span class="section-title">在线调试</span></div><div class="section-body">' + renderDebug(item) + '</div></section>' +
         '<section class="section"><div class="section-header"><span class="section-title">响应</span></div><div class="section-body">' + renderResponses(item.operation) + '</div></section>' +
         '<section class="section"><div class="section-header"><span class="section-title">Curl</span><button class="copy-btn" type="button" data-copy="curl">复制</button></div><div class="section-body"><pre id="curl-block">' + escapeHtml(renderCurl(item)) + '</pre></div></section>';

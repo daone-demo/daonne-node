@@ -64,13 +64,13 @@ function logAppError(error, trace) {
     traceId: trace,
     status: error.status,
     code: error.code,
-    message: error.message,
+    errorMessage: error.message,
     data: error.data
   };
   if (error.status >= 500) {
     log.error("error.handled", "Request failed with application error", {
       ...fields,
-      stack: error.stack
+      errorStack: error.stack
     });
     return;
   }
