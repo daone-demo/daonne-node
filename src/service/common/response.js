@@ -1,5 +1,8 @@
 import crypto from "node:crypto";
 import { AppError } from "./errors.js";
+import { createLogger, errorFields } from "../../infrastructure/common/logger.js";
+
+const log = createLogger("error");
 
 export function success(data = null) {
   return {
@@ -38,6 +41,7 @@ export function sendNoContent(res, trace) {
 
 export function sendError(res, error, trace) {
   if (error instanceof AppError) {
+    logAppError(error, trace);
     sendJson(res, error.status, {
       code: error.code,
       message: error.message,
@@ -45,9 +49,34 @@ export function sendError(res, error, trace) {
     }, trace);
     return;
   }
-  console.error(error);
+  log.error("error.handled", "Unhandled request error", {
+    traceId: trace,
+    ...errorFields(error)
+  });
   sendJson(res, 500, {
     code: "INTERNAL_ERROR",
     message: "服务器内部错误"
   }, trace);
+}
+
+function logAppError(error, trace) {
+  const fields = {
+    traceId: trace,
+    status: error.status,
+    code: error.code,
+    message: error.message,
+    data: error.data
+  };
+  if (error.status >= 500) {
+    log.error("error.handled", "Request failed with application error", {
+      ...fields,
+      stack: error.stack
+    });
+    return;
+  }
+  if (error.status === 404) {
+    log.debug("error.handled", "Request failed with not found", fields);
+    return;
+  }
+  log.warn("error.handled", "Request failed with application error", fields);
 }

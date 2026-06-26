@@ -45,7 +45,11 @@ export function openApiSpec() {
         }, "管理后台短信登录请求", ["phone", "code"]),
         UserProfileUpdateRequest: object({
           nickname: string("Daone 用户", "昵称"),
-          avatarUrl: string("https://example.com/avatar.png", "头像 URL")
+          avatarAssetId: string("100000000000000002", "头像素材 ID，推荐传上传接口返回的 id"),
+          avatarUrl: string("https://example.com/avatar.png", "头像 URL，兼容旧前端直接传 previewUrl"),
+          email: string("user@example.com", "邮箱"),
+          gender: string("UNKNOWN", "性别：MALE、FEMALE、UNKNOWN"),
+          birthday: string("1995-01-01", "生日，YYYY-MM-DD")
         }, "修改当前用户资料"),
         ProjectCreateRequest: object({
           title: string("测试项目", "项目标题")
@@ -107,6 +111,23 @@ export function openApiSpec() {
           fileSize: integer(128, "文件大小，单位字节"),
           fileBase64: string("iVBORw0KGgo=", "JSON 兼容上传时的文件 base64；推荐 multipart/form-data 的 file 字段")
         }, "上传本地文件到 OSS 并登记素材请求；推荐 multipart/form-data，file 字段为文件内容", ["fileName", "contentType"]),
+        AssetUploadData: object({
+          id: string("100000000000000002", "素材 ID"),
+          type: string("IMAGE", "素材类型：IMAGE、VIDEO"),
+          source: string("UPLOAD", "素材来源"),
+          fileName: string("cover.png", "文件名"),
+          previewUrl: string("https://example.com/image/cover.png", "素材预览 URL"),
+          url: string("https://example.com/image/cover.png", "上传后可访问 URL"),
+          objectKey: string("image/100000000000000001/cover.png", "OSS 或 Mock 存储对象 Key"),
+          fileSize: integer(128, "文件大小，单位字节"),
+          width: integer(null, "图片宽度，未知时为空"),
+          height: integer(null, "图片高度，未知时为空"),
+          durationSeconds: number(null, "视频时长，未知时为空"),
+          status: string("AVAILABLE", "内容审核状态"),
+          favorited: boolean(false, "当前用户是否收藏"),
+          tags: array(string("upload"), "素材标签"),
+          createdAt: string("2026-06-26T10:00:00.000Z", "创建时间")
+        }, "上传素材返回数据"),
         PointEstimateRequest: object({
           capabilityCode: string("IMAGE_GENERAL_V1", "AI 能力编码"),
           parameters: object({
@@ -298,8 +319,8 @@ export function openApiSpec() {
       "/v1/projects/{projectId}/shares": { post: op("创建项目分享", { params: [projectIdParam()], body: "ShareCreateRequest" }) },
       "/v1/projects/{projectId}/shares/{shareCode}": { delete: op("关闭项目分享", { params: [projectIdParam(), pathParam("shareCode", "分享码")] }) },
       "/v1/shares/{shareCode}": { get: op("访问分享", { public: true, params: [pathParam("shareCode", "分享码")] }) },
-      "/v1/assets": { get: op("素材列表", { query: [queryParam("scope", "素材范围：FILES、CENTER、RECOMMENDED、FAVORITE"), queryParam("projectId", "项目 ID"), queryParam("type", "素材类型：IMAGE、VIDEO"), queryParam("source", "素材来源：UPLOAD、GENERATED、TEMPLATE"), queryParam("keyword", "文件名关键词"), ...pageParams()] }), post: op("上传本地文件到 OSS 并返回 URL", { body: "AssetCompleteUploadRequest" }) },
-      "/v1/assets/upload-tickets": { post: op("上传本地文件到 OSS 并返回 URL", { body: "UploadTicketRequest" }) },
+      "/v1/assets": { get: op("素材列表", { query: [queryParam("scope", "素材范围：FILES、CENTER、RECOMMENDED、FAVORITE"), queryParam("projectId", "项目 ID"), queryParam("type", "素材类型：IMAGE、VIDEO"), queryParam("source", "素材来源：UPLOAD、GENERATED、TEMPLATE"), queryParam("keyword", "文件名关键词"), ...pageParams()] }), post: op("上传本地文件到 OSS 并返回 URL", { body: "AssetCompleteUploadRequest", data: "AssetUploadData" }) },
+      "/v1/assets/upload-tickets": { post: op("上传本地文件到 OSS 并返回 URL", { body: "UploadTicketRequest", data: "AssetUploadData" }) },
       "/v1/assets/{assetId}": { get: op("素材详情", { params: [assetIdParam()] }), delete: op("删除素材", { params: [assetIdParam()] }) },
       "/v1/assets/{assetId}/favorite": { put: op("收藏素材", { params: [assetIdParam()] }), delete: op("取消收藏素材", { params: [assetIdParam()] }) },
       "/v1/ai/capabilities": { get: op("AI 能力") },
@@ -390,6 +411,7 @@ function op(summary, options = {}) {
   };
   if (parameters.length) operation.parameters = parameters;
   if (options.body) operation.requestBody = jsonBody(options.body);
+  if (options.data) operation["x-data-schema"] = ref(options.data);
   if (options.public) operation.security = [];
   return operation;
 }
@@ -799,14 +821,16 @@ export function docsHtml() {
         seen.add(schemaName);
       }
       if (resolved.type === "array") {
-        rows.push({
-          key: prefix || "[]",
-          location,
-          required: options.required || false,
-          type: schemaLabel(resolved),
-          description: schemaDescription(resolved),
-          example: schemaExampleText(resolved)
-        });
+        if (!prefix) {
+          rows.push({
+            key: "[]",
+            location,
+            required: options.required || false,
+            type: schemaLabel(resolved),
+            description: schemaDescription(resolved),
+            example: schemaExampleText(resolved)
+          });
+        }
         rows.push(...collectSchemaFields(resolved.items, { location, prefix: (prefix || "items") + "[]", required: false, seen }));
         return rows;
       }
@@ -860,6 +884,10 @@ export function docsHtml() {
       const response = operation.responses?.["200"] || Object.values(operation.responses || {})[0];
       const schema = response?.content?.["application/json"]?.schema;
       return collectSchemaFields(schema, { location: "response" });
+    }
+
+    function dataFieldRows(operation) {
+      return collectSchemaFields(operation["x-data-schema"], { location: "data" });
     }
 
     function renderFieldTable(rows, emptyText, includeLocation = true) {
@@ -940,6 +968,7 @@ export function docsHtml() {
         '<section class="section"><div class="section-header"><span class="section-title">请求体</span></div><div class="section-body">' + renderBody(item.operation) + '</div></section>' +
         '<section class="section"><div class="section-header"><span class="section-title">入参字段</span></div><div class="section-body">' + renderFieldTable(requestFieldRows(item.operation), "无入参字段。") + '</div></section>' +
         '<section class="section"><div class="section-header"><span class="section-title">出参字段</span></div><div class="section-body">' + renderFieldTable(responseFieldRows(item.operation), "无出参字段。", false) + '</div></section>' +
+        '<section class="section"><div class="section-header"><span class="section-title">data 字段</span></div><div class="section-body">' + renderFieldTable(dataFieldRows(item.operation), "暂无 data 字段定义。", false) + '</div></section>' +
         '<section class="section"><div class="section-header"><span class="section-title">在线调试</span></div><div class="section-body">' + renderDebug(item) + '</div></section>' +
         '<section class="section"><div class="section-header"><span class="section-title">响应</span></div><div class="section-body">' + renderResponses(item.operation) + '</div></section>' +
         '<section class="section"><div class="section-header"><span class="section-title">Curl</span><button class="copy-btn" type="button" data-copy="curl">复制</button></div><div class="section-body"><pre id="curl-block">' + escapeHtml(renderCurl(item)) + '</pre></div></section>';

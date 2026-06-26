@@ -2,9 +2,11 @@ import { store } from "../../infrastructure/db/memoryStore.js";
 import { nextId } from "../../infrastructure/common/id.js";
 import { appConfig } from "../../infrastructure/config/env.js";
 import { badRequest, notFound } from "../common/errors.js";
+import { createLogger } from "../../infrastructure/common/logger.js";
 
 const ENABLED = "ENABLED";
 const DISABLED = "DISABLED";
+const pointsLog = createLogger("points");
 
 export function dashboard() {
   const now = new Date();
@@ -100,6 +102,7 @@ export function adjustPoints(adminUser, userId, amount, reason) {
     throw badRequest("PARAM_INVALID", "积分调整数量不能为空");
   }
   const before = { ...account };
+  const balanceBefore = account.availablePoints;
   account.availablePoints += value;
   account.grantedTotal += value > 0 ? value : 0;
   account.updatedAt = now();
@@ -116,6 +119,20 @@ export function adjustPoints(adminUser, userId, amount, reason) {
     createdAt: now()
   });
   audit(adminUser, "POINT_ADJUST", "USER", user.id, before, account, reason);
+  const logFields = {
+    adminUserId: adminUser?.id || "SYSTEM",
+    userId: user.id,
+    amount: value,
+    balanceBefore,
+    balanceAfter: account.availablePoints,
+    ledgerId,
+    reason: reason || "后台人工调整"
+  };
+  if (value < 0) {
+    pointsLog.warn("points.admin_adjusted", "Admin deducted points", logFields);
+  } else {
+    pointsLog.info("points.admin_adjusted", "Admin granted points", logFields);
+  }
   return {
     userId: user.id,
     availablePoints: account.availablePoints,

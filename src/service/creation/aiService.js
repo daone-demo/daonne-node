@@ -5,6 +5,10 @@ import { badGateway, badRequest, conflict, forbidden, notFound } from "../common
 import { requireProject } from "./projectService.js";
 import { assertAssetsAccessible } from "./assetService.js";
 import { createProviderGenerationTask } from "../../infrastructure/middleware/modelClient.js";
+import { createLogger, errorFields } from "../../infrastructure/common/logger.js";
+
+const aiLog = createLogger("ai");
+const pointsLog = createLogger("points");
 
 export function capabilities() {
   return [...store.models.values()]
@@ -57,6 +61,14 @@ export async function createTask(userId, idempotencyKey, body) {
   const existing = [...store.generationTasks.values()]
     .find((item) => item.userId === userId && item.idempotencyKey === idempotencyKey);
   if (existing) {
+    aiLog.info("generation_task.idempotent_hit", "Generation task idempotency hit", {
+      userId,
+      taskId: existing.id,
+      capabilityCode: existing.capabilityCode,
+      status: existing.status,
+      estimatedPoints: existing.estimatedPoints,
+      actualPoints: existing.actualPoints
+    });
     return toTaskView(existing);
   }
   const capability = store.models.get(body.capabilityCode);
@@ -71,7 +83,7 @@ export async function createTask(userId, idempotencyKey, body) {
   }
   assertAssetsAccessible(userId, body.referenceAssetIds || []);
   const points = estimatePoints(body.capabilityCode, body.parameters).estimatedPoints;
-  ensureEnoughPoints(userId, points);
+  ensureEnoughPoints(userId, points, body.capabilityCode);
   const id = nextId();
   const t = new Date().toISOString();
   const task = {
@@ -109,8 +121,18 @@ export async function createTask(userId, idempotencyKey, body) {
     }
   }
   store.generationTasks.set(id, task);
+  aiLog.info("generation_task.created", "Generation task created", {
+    userId,
+    taskId: id,
+    projectId: task.projectId,
+    taskType: task.taskType,
+    capabilityCode: task.capabilityCode,
+    status: task.status,
+    estimatedPoints: task.estimatedPoints,
+    actualPoints: task.actualPoints
+  });
   if (task.status === "SUCCEEDED") {
-    chargePoints(userId, points, id);
+    chargePoints(userId, points, task);
   }
   return toTaskView(task);
 }
@@ -149,9 +171,18 @@ function requireTask(userId, taskId) {
   return task;
 }
 
-function chargePoints(userId, points, taskId) {
+function chargePoints(userId, points, task) {
   const account = store.pointAccounts.get(userId);
-  if (!account) return;
+  if (!account) {
+    pointsLog.warn("points.account_missing", "Point account missing during consumption", {
+      userId,
+      taskId: task.id,
+      capabilityCode: task.capabilityCode,
+      estimatedPoints: points
+    });
+    return;
+  }
+  const balanceBefore = account.availablePoints;
   account.availablePoints -= points;
   account.updatedAt = new Date().toISOString();
   const ledgerId = nextId();
@@ -162,15 +193,31 @@ function chargePoints(userId, points, taskId) {
     amount: -points,
     balanceAfter: account.availablePoints,
     bizType: "GENERATION_TASK",
-    bizId: taskId,
+    bizId: task.id,
     description: "AI 生成任务消费",
     createdAt: new Date().toISOString()
   });
+  pointsLog.info("points.consumed", "Points consumed by generation task", {
+    userId,
+    taskId: task.id,
+    capabilityCode: task.capabilityCode,
+    estimatedPoints: points,
+    actualPoints: task.actualPoints,
+    balanceBefore,
+    balanceAfter: account.availablePoints,
+    ledgerId
+  });
 }
 
-function ensureEnoughPoints(userId, points) {
+function ensureEnoughPoints(userId, points, capabilityCode) {
   const account = store.pointAccounts.get(userId);
   if (!account || account.availablePoints < points) {
+    pointsLog.warn("points.not_enough", "Points are not enough", {
+      userId,
+      capabilityCode,
+      estimatedPoints: points,
+      availablePoints: account?.availablePoints || 0
+    });
     throw badRequest("POINTS_NOT_ENOUGH", "积分不足");
   }
 }
@@ -257,6 +304,13 @@ async function safeCreateProviderTask(task, capability) {
   try {
     return await createProviderGenerationTask(task, capability);
   } catch (error) {
+    aiLog.error("generation_task.provider_create_failed", "Provider generation task creation failed", {
+      userId: task.userId,
+      taskId: task.id,
+      capabilityCode: task.capabilityCode,
+      taskType: task.taskType,
+      ...errorFields(error)
+    });
     throw badGateway("MODEL_SERVICE_ERROR", "外部模型服务异常", { reason: error.message });
   }
 }

@@ -1,4 +1,7 @@
 import { store } from "../db/memoryStore.js";
+import { createLogger, errorFields } from "../common/logger.js";
+
+const runtimeStoreLog = createLogger("runtime_store");
 
 export async function mirrorPostgresBusinessTables(pool) {
   const client = await pool.connect();
@@ -26,7 +29,10 @@ async function mirrorStep(client, name, mirror) {
     await client.query("COMMIT");
   } catch (error) {
     await client.query("ROLLBACK");
-    console.warn(`Postgres business table mirror failed at ${name}:`, error.message);
+    runtimeStoreLog.warn("postgres_business_mirror.step_failed", "Postgres business table mirror step failed", {
+      step: name,
+      ...errorFields(error)
+    });
   }
 }
 

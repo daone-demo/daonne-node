@@ -1,5 +1,5 @@
 import { store } from "../../infrastructure/db/memoryStore.js";
-import { forbidden, notFound } from "../common/errors.js";
+import { badRequest, forbidden, notFound } from "../common/errors.js";
 
 export function getProfile(userId) {
   const user = store.users.get(userId);
@@ -34,7 +34,7 @@ export function updateProfile(userId, body) {
   }
   const t = new Date().toISOString();
   if (body.nickname !== undefined) user.nickname = body.nickname;
-  if (body.email !== undefined) user.email = body.email;
+  if (body.email !== undefined) user.email = normalizeEmail(body.email);
   if (body.gender !== undefined) user.gender = body.gender;
   if (body.birthday !== undefined) user.birthday = body.birthday;
   if (body.avatarAssetId !== undefined && body.avatarAssetId !== null) {
@@ -43,6 +43,8 @@ export function updateProfile(userId, body) {
       throw forbidden();
     }
     user.avatarUrl = asset.previewUrl;
+  } else if (body.avatarUrl !== undefined) {
+    user.avatarUrl = normalizeAvatarUrl(body.avatarUrl);
   }
   user.updatedAt = t;
   return getProfile(userId);
@@ -83,6 +85,31 @@ function maskPhone(phone) {
     return phone;
   }
   return `${phone.slice(0, 3)}****${phone.slice(-4)}`;
+}
+
+function normalizeEmail(value) {
+  if (value === null || value === "") {
+    return null;
+  }
+  const email = String(value).trim();
+  if (!email) {
+    return null;
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw badRequest("PARAM_INVALID", "邮箱格式不正确");
+  }
+  return email;
+}
+
+function normalizeAvatarUrl(value) {
+  if (value === null || value === "") {
+    return null;
+  }
+  const avatarUrl = String(value).trim();
+  if (!avatarUrl) {
+    return null;
+  }
+  return avatarUrl;
 }
 
 function resolveVipName(subscription) {

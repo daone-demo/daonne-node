@@ -371,7 +371,21 @@ describe("Daone Vercel Node API", () => {
     assert.equal(response.status, 200);
     assert.equal(response.body.data.source, "UPLOAD");
     assert.match(response.body.data.url, /\/api\/mock-files\/image\/\d+\//);
+    const avatarUrl = response.body.data.url;
     const objectKey = response.body.data.objectKey;
+
+    response = await request("PATCH", "/api/v1/users/me", {
+      avatarUrl,
+      email: "  user@example.com  "
+    }, token);
+    assert.equal(response.status, 200);
+    assert.equal(response.body.data.avatarUrl, avatarUrl);
+    assert.equal(response.body.data.email, "user@example.com");
+
+    response = await request("GET", "/api/v1/users/me", null, token);
+    assert.equal(response.status, 200);
+    assert.equal(response.body.data.avatarUrl, avatarUrl);
+    assert.equal(response.body.data.email, "user@example.com");
 
     response = await request("POST", "/api/v1/assets/upload-tickets", {
       projectId,

@@ -4,6 +4,12 @@ import { store } from "../../infrastructure/db/memoryStore.js";
 import { nextId, orderNo as newOrderNo } from "../../infrastructure/common/id.js";
 import { badGateway, badRequest, conflict, forbidden, notFound } from "../common/errors.js";
 import { createChannelPayment } from "../../infrastructure/middleware/paymentClient.js";
+import { createLogger, errorFields } from "../../infrastructure/common/logger.js";
+
+const billingLog = createLogger("billing");
+const paymentLog = createLogger("payment");
+const subscriptionLog = createLogger("subscription");
+const pointsLog = createLogger("points");
 
 export function plans() {
   return [...store.prices.values()]
@@ -32,7 +38,16 @@ export function createOrder(userId, idempotencyKey, body) {
     throw badRequest("IDEMPOTENCY_KEY_REQUIRED", "Idempotency-Key 不能为空");
   }
   const existing = [...store.orders.values()].find((item) => item.userId === userId && item.idempotencyKey === idempotencyKey);
-  if (existing) return toOrderCreateView(existing);
+  if (existing) {
+    billingLog.info("order.idempotent_hit", "Order create idempotency hit", {
+      userId,
+      orderNo: existing.orderNo,
+      status: existing.status,
+      productCode: existing.productCode,
+      amountFen: existing.amountFen
+    });
+    return toOrderCreateView(existing);
+  }
   if (body.orderType !== "PLAN") {
     throw badRequest("ORDER_TYPE_UNSUPPORTED", "一期仅支持套餐订单");
   }
@@ -64,6 +79,17 @@ export function createOrder(userId, idempotencyKey, body) {
     updatedAt: t
   };
   store.orders.set(orderNo, order);
+  billingLog.info("order.created", "Order created", {
+    userId,
+    orderNo,
+    orderType: order.orderType,
+    productCode: order.productCode,
+    productName: order.productName,
+    amountFen: order.amountFen,
+    currency: order.currency,
+    status: order.status,
+    expireAt: order.expireAt
+  });
   return toOrderCreateView(order);
 }
 
@@ -75,6 +101,14 @@ export async function createPayment(userId, orderNo, body) {
   if (!["WECHAT", "ALIPAY"].includes(body.payType)) {
     throw badRequest("PAY_TYPE_UNSUPPORTED", "仅支持微信支付和支付宝支付");
   }
+  paymentLog.info("payment.create_requested", "Payment create requested", {
+    userId,
+    orderNo,
+    payType: body.payType,
+    amountFen: order.amountFen,
+    currency: order.currency,
+    orderStatus: order.status
+  });
   order.status = "PAYING";
   order.updatedAt = new Date().toISOString();
   const channelPayment = await safeCreateChannelPayment(order, body.payType);
@@ -94,6 +128,14 @@ export async function createPayment(userId, orderNo, body) {
     updatedAt: now
   };
   store.transactions.set(transactionKey, transaction);
+  paymentLog.info("payment.channel_created", "Payment channel created", {
+    userId,
+    orderNo,
+    payType: transaction.payType,
+    transactionNo: transaction.transactionNo,
+    status: transaction.status,
+    expireAt: order.expireAt
+  });
   return {
     payType: transaction.payType,
     qrCodeContent: transaction.qrCodeContent,
@@ -123,13 +165,48 @@ export function completeLocalPayment(userId, orderNo) {
 }
 
 export function notifyPayment(payType, body, headers = {}) {
-  const payment = parsePaymentNotify(payType, body, headers);
+  paymentLog.info("payment.notify_received", "Payment notify received", {
+    payType,
+    orderNo: body?.orderNo || body?.out_trade_no || null
+  });
+  let payment;
+  try {
+    payment = parsePaymentNotify(payType, body, headers);
+  } catch (error) {
+    paymentLog.warn("payment.notify_rejected", "Payment notify rejected", {
+      payType,
+      orderNo: body?.orderNo || body?.out_trade_no || null,
+      ...errorFields(error)
+    });
+    throw error;
+  }
   const order = store.orders.get(payment.orderNo);
-  if (!order) throw notFound("订单不存在");
+  if (!order) {
+    paymentLog.warn("payment.notify_order_missing", "Payment notify order missing", {
+      payType,
+      orderNo: payment.orderNo,
+      amountFen: payment.amountFen,
+      currency: payment.currency
+    });
+    throw notFound("订单不存在");
+  }
   if (order.amountFen !== payment.amountFen || order.currency !== payment.currency) {
+    paymentLog.warn("payment.amount_mismatch", "Payment notify amount or currency mismatch", {
+      payType,
+      orderNo: payment.orderNo,
+      expectedAmountFen: order.amountFen,
+      actualAmountFen: payment.amountFen,
+      expectedCurrency: order.currency,
+      actualCurrency: payment.currency
+    });
     throw conflict("PAYMENT_AMOUNT_MISMATCH", "支付金额或币种不一致");
   }
   completeOrder(order, payment.channelTransactionNo || `${payType}-${Date.now()}`);
+  paymentLog.info("payment.notify_processed", "Payment notify processed", {
+    payType,
+    orderNo: payment.orderNo,
+    channelTransactionNo: payment.channelTransactionNo || null
+  });
   return payType === "ALIPAY" ? "success" : "SUCCESS";
 }
 
@@ -142,22 +219,31 @@ export function cancelAutoRenew(userId) {
 }
 
 function completeOrder(order, channelTransactionNo) {
-  if (order.status === "PAID") return;
+  if (order.status === "PAID") {
+    billingLog.info("order.complete_idempotent_skip", "Paid order completion skipped", {
+      userId: order.userId,
+      orderNo: order.orderNo,
+      channelTransactionNo
+    });
+    return;
+  }
   const t = new Date().toISOString();
   order.status = "PAID";
   order.paidAt = t;
   order.updatedAt = t;
   const price = store.prices.get(order.productCode);
   const plan = store.plans.get(price.planId);
+  const expireAt = addCycle(new Date(), price).toISOString();
   store.subscriptions.set(order.userId, {
     planCode: plan.planCode,
     planName: plan.planName,
     priceCode: price.priceCode,
-    expireAt: addCycle(new Date(), price).toISOString(),
+    expireAt,
     autoRenew: false,
     latestOrderNo: order.orderNo
   });
   const account = store.pointAccounts.get(order.userId);
+  const balanceBefore = account.availablePoints;
   account.availablePoints += price.grantPoints;
   account.grantedTotal += price.grantPoints;
   account.updatedAt = t;
@@ -180,6 +266,32 @@ function completeOrder(order, channelTransactionNo) {
       transaction.updatedAt = t;
     }
   }
+  billingLog.info("order.paid", "Order paid", {
+    userId: order.userId,
+    orderNo: order.orderNo,
+    amountFen: order.amountFen,
+    currency: order.currency,
+    channelTransactionNo,
+    paidAt: order.paidAt
+  });
+  subscriptionLog.info("subscription.activated", "Subscription activated", {
+    userId: order.userId,
+    orderNo: order.orderNo,
+    planCode: plan.planCode,
+    planName: plan.planName,
+    priceCode: price.priceCode,
+    expireAt
+  });
+  pointsLog.info("points.granted", "Points granted by paid order", {
+    userId: order.userId,
+    orderNo: order.orderNo,
+    planCode: plan.planCode,
+    priceCode: price.priceCode,
+    grantPoints: price.grantPoints,
+    balanceBefore,
+    balanceAfter: account.availablePoints,
+    ledgerId
+  });
 }
 
 function requireOrder(userId, orderNo) {
@@ -231,6 +343,12 @@ async function safeCreateChannelPayment(order, payType) {
   try {
     return await createChannelPayment(order, payType);
   } catch (error) {
+    paymentLog.error("payment.channel_failed", "Payment channel creation failed", {
+      userId: order.userId,
+      orderNo: order.orderNo,
+      payType,
+      ...errorFields(error)
+    });
     throw badGateway("PAYMENT_FAILED", "支付创建失败", { reason: error.message });
   }
 }

@@ -6,6 +6,9 @@ import { badRequest, forbidden, unauthorized } from "../common/errors.js";
 import { cacheDel, cacheGetJson, cacheSetJson, redisCacheEnabled } from "../../infrastructure/middleware/redisCache.js";
 import { sendSms } from "../../infrastructure/middleware/smsClient.js";
 import { findOrCreatePostgresUser, findPostgresUserByPhone } from "../../infrastructure/middleware/postgresRuntimeStore.js";
+import { createLogger } from "../../infrastructure/common/logger.js";
+
+const smsLog = createLogger("auth_sms");
 
 export async function sendSmsCode(phone, scene = "LOGIN") {
   const normalizedPhone = normalizePhone(phone);
@@ -336,10 +339,6 @@ function maskPhone(phone) {
 }
 
 function logSms(event, fields, level = "info") {
-  const payload = {
-    scope: "auth.sms",
-    event,
-    ...fields
-  };
-  console[level](JSON.stringify(payload));
+  const method = ["debug", "info", "warn", "error"].includes(level) ? level : "info";
+  smsLog[method](event, "Auth SMS event", fields);
 }

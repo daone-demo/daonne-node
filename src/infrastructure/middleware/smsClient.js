@@ -1,5 +1,8 @@
 import crypto from "node:crypto";
 import { appConfig } from "../config/env.js";
+import { createLogger } from "../common/logger.js";
+
+const smsProviderLog = createLogger("sms_provider");
 
 export async function sendSms(phone, code, scene = "LOGIN") {
   if (appConfig.sms.mockEnabled) {
@@ -94,10 +97,6 @@ function maskPhone(phone) {
 }
 
 function logSmsProvider(event, fields, level = "info") {
-  const payload = {
-    scope: "provider.sms.aliyun",
-    event,
-    ...fields
-  };
-  console[level](JSON.stringify(payload));
+  const method = ["debug", "info", "warn", "error"].includes(level) ? level : "info";
+  smsProviderLog[method](event, "SMS provider event", fields);
 }

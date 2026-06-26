@@ -19,8 +19,10 @@ import * as adminService from "../service/admin/adminService.js";
 import * as modelClient from "../infrastructure/middleware/modelClient.js";
 import { docsHtml, openApiSpec } from "./openapi.js";
 import { hydrateRuntimeStore, persistRuntimeStore, runtimeStoreHealth } from "../infrastructure/middleware/runtimeStore.js";
+import { createLogger, updateLogContext, withLogContext } from "../infrastructure/common/logger.js";
 
 const router = new Router();
+const requestLog = createLogger("request");
 
 router.post("/api/v1/auth/sms-codes", async ({ body }) => auth.sendSmsCode(body.phone, body.scene || "LOGIN"), { public: true });
 router.post("/api/v1/auth/sms-login", async ({ body }) => auth.loginBySms(body.phone, body.code), { public: true });
@@ -232,71 +234,97 @@ router.get("/api/health", async () => {
 
 export async function handleRequest(req, res) {
   const trace = traceId();
-  cors(req, res);
-  if (req.method === "OPTIONS") {
-    res.statusCode = 204;
-    res.end();
+  const startedAt = Date.now();
+  return withLogContext({ traceId: trace, method: req.method }, async () => {
+    let pathname = "";
+    try {
+      const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
+      pathname = url.pathname;
+      updateLogContext({ path: pathname });
+      cors(req, res);
+      if (req.method === "OPTIONS") {
+        res.statusCode = 204;
+        res.setHeader("x-trace-id", trace);
+        res.end();
+        return;
+      }
+      if (!isOperationalRoute(url.pathname)) {
+        await hydrateRuntimeStore();
+      }
+      if (req.method === "GET" && url.pathname.startsWith("/api/mock-files/")) {
+        if (!appConfig.storage.mockEnabled) {
+          throw notFound("Mock 文件读取接口未启用");
+        }
+        sendMockFile(res, trace, decodeURIComponent(url.pathname.slice("/api/mock-files/".length)));
+        return;
+      }
+      const matched = router.match(req.method, url.pathname);
+      const token = bearerToken(req);
+      let user = null;
+      if (token) {
+        user = await auth.resolveUser(token);
+      }
+      if (user) {
+        updateLogContext({ userId: user.id, role: user.role || "USER" });
+      }
+      if (!matched.options.public && !user) {
+        throw unauthorized();
+      }
+      if (matched.options.admin && !hasRole(user.role, "ADMIN")) {
+        throw forbidden();
+      }
+      const body = ["POST", "PUT", "PATCH"].includes(req.method) ? await readBody(req) : {};
+      const result = await matched.handler({ req, url, params: matched.params, body, user, token });
+      if (["POST", "PUT", "PATCH", "DELETE"].includes(req.method)) {
+        await persistRuntimeStore();
+      }
+      if (result?.__html) {
+        res.statusCode = 200;
+        res.setHeader("content-type", "text/html; charset=utf-8");
+        res.end(result.__html);
+        return;
+      }
+      if (result?.__noContent) {
+        sendNoContent(res, trace);
+        return;
+      }
+      if (result?.__providerStream) {
+        await sendProviderStream(res, result.response, trace);
+        return;
+      }
+      if (result?.__rawJson) {
+        sendRawJson(res, 200, result.data, trace);
+        return;
+      }
+      if (result?.__rawText) {
+        sendRawText(res, 200, result.text, trace);
+        return;
+      }
+      if (matched.options.rawSuccess) {
+        sendJson(res, 200, result, trace);
+        return;
+      }
+      sendJson(res, 200, success(result), trace);
+    } catch (error) {
+      sendError(res, error, trace);
+    } finally {
+      logRequestCompleted(req, pathname, res.statusCode || 200, Date.now() - startedAt);
+    }
+  });
+}
+
+function logRequestCompleted(req, pathname, status, durationMs) {
+  const fields = {
+    method: req.method,
+    path: pathname || req.url || "",
+    status,
+    durationMs
+  };
+  if (isOperationalRoute(pathname)) {
+    requestLog.debug("request.completed", "Request completed", fields);
     return;
   }
-  try {
-    const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
-    if (!isOperationalRoute(url.pathname)) {
-      await hydrateRuntimeStore();
-    }
-    if (req.method === "GET" && url.pathname.startsWith("/api/mock-files/")) {
-      if (!appConfig.storage.mockEnabled) {
-        throw notFound("Mock 文件读取接口未启用");
-      }
-      sendMockFile(res, trace, decodeURIComponent(url.pathname.slice("/api/mock-files/".length)));
-      return;
-    }
-    const matched = router.match(req.method, url.pathname);
-    const token = bearerToken(req);
-    let user = null;
-    if (token) {
-      user = await auth.resolveUser(token);
-    }
-    if (!matched.options.public && !user) {
-      throw unauthorized();
-    }
-    if (matched.options.admin && !hasRole(user.role, "ADMIN")) {
-      throw forbidden();
-    }
-    const body = ["POST", "PUT", "PATCH"].includes(req.method) ? await readBody(req) : {};
-    const result = await matched.handler({ req, url, params: matched.params, body, user, token });
-    if (["POST", "PUT", "PATCH", "DELETE"].includes(req.method)) {
-      await persistRuntimeStore();
-    }
-    if (result?.__html) {
-      res.statusCode = 200;
-      res.setHeader("content-type", "text/html; charset=utf-8");
-      res.end(result.__html);
-      return;
-    }
-    if (result?.__noContent) {
-      sendNoContent(res, trace);
-      return;
-    }
-    if (result?.__providerStream) {
-      await sendProviderStream(res, result.response, trace);
-      return;
-    }
-    if (result?.__rawJson) {
-      sendRawJson(res, 200, result.data, trace);
-      return;
-    }
-    if (result?.__rawText) {
-      sendRawText(res, 200, result.text, trace);
-      return;
-    }
-    if (matched.options.rawSuccess) {
-      sendJson(res, 200, result, trace);
-      return;
-    }
-    sendJson(res, 200, success(result), trace);
-  } catch (error) {
-    sendError(res, error, trace);
-  }
+  requestLog.info("request.completed", "Request completed", fields);
 }
 
 function page(items, url) {
