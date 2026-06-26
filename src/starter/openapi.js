@@ -27,6 +27,146 @@ export function openApiSpec() {
           pageSize: integer(20),
           total: integer(100)
         }, "分页数据"),
+        AuthSmsCodeData: object({
+          retryAfterSeconds: integer(60, "再次发送验证码需等待秒数")
+        }, "短信验证码发送结果"),
+        UserProfileData: object({
+          id: string("100000000000000001", "用户 ID"),
+          nickname: string("Daone 用户", "昵称"),
+          avatarUrl: string("https://example.com/avatar.png", "头像 URL"),
+          phoneMasked: string("138****8000", "脱敏手机号"),
+          email: string("user@example.com", "邮箱"),
+          gender: string("UNKNOWN", "性别：MALE、FEMALE、UNKNOWN"),
+          birthday: string("1995-01-01", "生日，YYYY-MM-DD"),
+          vipName: string("专业版", "会员名称"),
+          subscription: object({}, "订阅信息，没有订阅时为空"),
+          points: object({
+            available: integer(100, "可用积分"),
+            frozen: integer(0, "冻结积分"),
+            grantedTotal: integer(100, "累计发放积分")
+          }, "积分概览")
+        }, "当前用户资料"),
+        AuthLoginData: object({
+          token: string("dn_xxx", "登录令牌"),
+          accessToken: string("dn_xxx", "访问令牌，兼容前端字段"),
+          refreshToken: string("dn_xxx", "刷新令牌，当前与 token 相同"),
+          expires: string("2026-06-26T12:00:00.000Z", "过期时间"),
+          expiresInSeconds: integer(604800, "有效期秒数"),
+          user: ref("UserProfileData")
+        }, "登录返回数据"),
+        QrSessionData: object({
+          ticket: string("qr_xxx", "扫码登录票据"),
+          authorizeUrl: string("https://example.com/wechat-login?ticket=qr_xxx", "微信授权 URL"),
+          qrCodeUrl: string("https://example.com/wechat-login?ticket=qr_xxx", "二维码内容 URL"),
+          expiresAt: string("2026-06-26T12:00:00.000Z", "过期时间"),
+          expiresInSeconds: integer(300, "有效期秒数")
+        }, "微信扫码登录会话"),
+        QrStatusData: object({
+          ticket: string("qr_xxx", "扫码登录票据"),
+          status: string("WAITING", "扫码状态")
+        }, "微信扫码登录状态"),
+        PointAccountData: object({
+          available: integer(100, "可用积分"),
+          frozen: integer(0, "冻结积分"),
+          grantedTotal: integer(100, "累计发放积分")
+        }, "积分账户"),
+        PointLedgerData: object({
+          id: string("100000000000000011", "流水 ID"),
+          userId: string("100000000000000001", "用户 ID"),
+          amount: integer(-25, "积分变动数量"),
+          balanceAfter: integer(75, "变动后余额"),
+          direction: string("DECREASE", "流水方向：INCREASE、DECREASE"),
+          reason: string("图片生成扣费", "变动原因"),
+          bizType: string("GENERATION_TASK", "业务类型"),
+          bizId: string("100000000000000021", "业务 ID"),
+          createdAt: string("2026-06-26T10:00:00.000Z", "创建时间")
+        }, "积分流水"),
+        PointLedgerPageData: object({
+          records: array(ref("PointLedgerData"), "积分流水列表"),
+          page: integer(1, "页码"),
+          pageSize: integer(20, "每页数量"),
+          total: integer(100, "总数")
+        }, "积分流水分页"),
+        PointLedgerDetailData: object({
+          ledger: ref("PointLedgerData")
+        }, "积分流水详情"),
+        ProjectData: object({
+          id: string("100000000000000001", "项目 ID"),
+          title: string("测试项目", "项目标题"),
+          coverUrl: string("https://example.com/cover.png", "封面 URL"),
+          status: string("ACTIVE", "项目状态"),
+          latestRevision: integer(1, "最新画布版本"),
+          createdAt: string("2026-06-26T10:00:00.000Z", "创建时间"),
+          updatedAt: string("2026-06-26T10:00:00.000Z", "更新时间")
+        }, "项目数据"),
+        ProjectPageData: object({
+          records: array(ref("ProjectData"), "项目列表"),
+          page: integer(1, "页码"),
+          pageSize: integer(20, "每页数量"),
+          total: integer(100, "总数")
+        }, "项目分页"),
+        CanvasData: object({
+          project: ref("ProjectData"),
+          revision: integer(1, "画布版本"),
+          canvasData: object({}, "画布快照 JSON 数据"),
+          updatedAt: string("2026-06-26T10:00:00.000Z", "更新时间")
+        }, "画布数据"),
+        ElementGroupData: object({
+          id: string("100000000000000031", "元素组 ID"),
+          projectId: string("100000000000000001", "项目 ID"),
+          projectName: string("商品主视觉元素组", "元素组名称"),
+          projectDescription: string("商品图、标题文本和价格标签组成的一组元素", "元素组描述"),
+          projectStructure: object({}, "画布元素组结构 JSON"),
+          createdAt: string("2026-06-26T10:00:00.000Z", "创建时间")
+        }, "画布元素组"),
+        ElementGroupPageData: object({
+          records: array(ref("ElementGroupData"), "元素组列表"),
+          page: integer(1, "页码"),
+          pageSize: integer(20, "每页数量"),
+          total: integer(100, "总数")
+        }, "画布元素组分页"),
+        ProjectVersionData: object({
+          id: string("100000000000000041", "版本 ID"),
+          projectId: string("100000000000000001", "项目 ID"),
+          revision: integer(1, "版本号"),
+          saveType: string("MANUAL", "保存类型"),
+          canvasData: object({}, "画布快照 JSON 数据"),
+          createdAt: string("2026-06-26T10:00:00.000Z", "创建时间")
+        }, "项目历史版本"),
+        ProjectVersionPageData: object({
+          records: array(ref("ProjectVersionData"), "历史版本列表"),
+          page: integer(1, "页码"),
+          pageSize: integer(20, "每页数量"),
+          total: integer(100, "总数")
+        }, "项目历史版本分页"),
+        ShareData: object({
+          shareCode: string("SHARE123", "分享码"),
+          shareUrl: string("https://example.com/share/SHARE123", "分享访问 URL"),
+          expireAt: string("2026-07-03T10:00:00.000Z", "过期时间"),
+          project: ref("ProjectData"),
+          canvasData: object({}, "分享画布数据")
+        }, "分享数据"),
+        AssetData: object({
+          id: string("100000000000000002", "素材 ID"),
+          type: string("IMAGE", "素材类型：IMAGE、VIDEO"),
+          source: string("UPLOAD", "素材来源"),
+          fileName: string("cover.png", "文件名"),
+          previewUrl: string("https://example.com/image/cover.png", "素材预览 URL"),
+          fileSize: integer(128, "文件大小，单位字节"),
+          width: integer(1024, "图片宽度"),
+          height: integer(1024, "图片高度"),
+          durationSeconds: number(5, "视频时长，图片为空"),
+          status: string("AVAILABLE", "素材状态"),
+          favorited: boolean(false, "当前用户是否收藏"),
+          tags: array(string("upload"), "素材标签"),
+          createdAt: string("2026-06-26T10:00:00.000Z", "创建时间")
+        }, "素材数据"),
+        AssetPageData: object({
+          records: array(ref("AssetData"), "素材列表"),
+          page: integer(1, "页码"),
+          pageSize: integer(20, "每页数量"),
+          total: integer(100, "总数")
+        }, "素材分页"),
         SmsCodeRequest: object({
           phone: string("13800138000", "手机号"),
           scene: string("LOGIN", "验证码场景，登录默认为 LOGIN")
@@ -128,6 +268,261 @@ export function openApiSpec() {
           tags: array(string("upload"), "素材标签"),
           createdAt: string("2026-06-26T10:00:00.000Z", "创建时间")
         }, "上传素材返回数据"),
+        AiCapabilitiesData: object({
+          items: array(object({
+            code: string("IMAGE_GENERAL_V1", "能力编码"),
+            name: string("通用图片生成", "能力名称"),
+            type: string("IMAGE", "能力类型"),
+            basePoints: integer(25, "基础积分"),
+            enabled: boolean(true, "是否启用")
+          }, "AI 能力"), "AI 能力列表")
+        }, "AI 能力列表数据"),
+        AiSkillsData: object({
+          items: array(object({
+            code: string("PROMPT_TRANSLATE", "技能编码"),
+            name: string("提示词翻译", "技能名称"),
+            description: string("中文提示词翻译为英文", "技能说明")
+          }, "AI 技能"), "AI 技能列表")
+        }, "AI 技能列表数据"),
+        PointEstimateData: object({
+          capabilityCode: string("IMAGE_GENERAL_V1", "AI 能力编码"),
+          points: integer(50, "预计消耗积分"),
+          detail: object({}, "计费明细")
+        }, "积分预估结果"),
+        PromptTranslationData: object({
+          sourceText: string("白底运动鞋", "原提示词"),
+          translatedText: string("white background sneakers", "翻译后提示词"),
+          targetLanguage: string("en", "目标语言")
+        }, "提示词翻译结果"),
+        GenerationTaskData: object({
+          id: string("100000000000000051", "任务 ID"),
+          projectId: string("100000000000000001", "项目 ID"),
+          capabilityCode: string("IMAGE_GENERAL_V1", "AI 能力编码"),
+          prompt: string("白底运动鞋", "提示词"),
+          parameters: object({}, "生成参数"),
+          status: string("PENDING", "任务状态"),
+          pointsCost: integer(25, "消耗积分"),
+          resultAssets: array(ref("AssetData"), "生成结果素材"),
+          errorMessage: string(null, "失败原因"),
+          createdAt: string("2026-06-26T10:00:00.000Z", "创建时间"),
+          updatedAt: string("2026-06-26T10:00:00.000Z", "更新时间")
+        }, "生成任务"),
+        GenerationTaskPageData: object({
+          records: array(ref("GenerationTaskData"), "任务列表"),
+          page: integer(1, "页码"),
+          pageSize: integer(20, "每页数量"),
+          total: integer(100, "总数")
+        }, "生成任务分页"),
+        ProviderModelsData: object({
+          items: array(object({
+            model: string("gpt-4o-mini", "模型编码"),
+            name: string("GPT-4o mini", "模型名称"),
+            type: string("chat", "模型类型"),
+            enabled: boolean(true, "是否启用")
+          }, "模型"), "模型列表")
+        }, "模型网关可选模型"),
+        ProviderToolsData: object({
+          items: array(object({
+            code: string("remove-bg", "工具编码"),
+            name: string("智能抠图", "工具名称"),
+            description: string("移除图片背景", "工具说明")
+          }, "工具"), "工具列表")
+        }, "模型小工具列表"),
+        ChatSessionData: object({
+          id: string("100000000000000061", "对话 ID"),
+          projectId: string("100000000000000001", "项目 ID"),
+          title: string("新的对话", "对话标题"),
+          createdAt: string("2026-06-26T10:00:00.000Z", "创建时间"),
+          updatedAt: string("2026-06-26T10:00:00.000Z", "更新时间")
+        }, "对话会话"),
+        ChatSessionPageData: object({
+          records: array(ref("ChatSessionData"), "对话列表"),
+          page: integer(1, "页码"),
+          pageSize: integer(20, "每页数量"),
+          total: integer(100, "总数")
+        }, "对话分页"),
+        ChatMessageData: object({
+          id: string("100000000000000071", "消息 ID"),
+          sessionId: string("100000000000000061", "对话 ID"),
+          role: string("assistant", "消息角色：user、assistant"),
+          content: string("已为你生成提示词", "消息内容"),
+          assetIds: array(string("100000000000000002"), "关联素材 ID"),
+          createdAt: string("2026-06-26T10:00:00.000Z", "创建时间")
+        }, "对话消息"),
+        ChatMessagePageData: object({
+          records: array(ref("ChatMessageData"), "消息列表"),
+          page: integer(1, "页码"),
+          pageSize: integer(20, "每页数量"),
+          total: integer(100, "总数")
+        }, "对话消息分页"),
+        WorkflowData: object({
+          id: string("100000000000000081", "工作流 ID"),
+          title: string("商品海报工作流", "工作流标题"),
+          description: string("生成商品海报的流程", "工作流描述"),
+          flowData: object({}, "工作流画布数据"),
+          status: string("ENABLED", "工作流状态"),
+          createdAt: string("2026-06-26T10:00:00.000Z", "创建时间"),
+          updatedAt: string("2026-06-26T10:00:00.000Z", "更新时间")
+        }, "工作流数据"),
+        WorkflowPageData: object({
+          records: array(ref("WorkflowData"), "工作流列表"),
+          page: integer(1, "页码"),
+          pageSize: integer(20, "每页数量"),
+          total: integer(100, "总数")
+        }, "工作流分页"),
+        PlanData: object({
+          planCode: string("PRO", "套餐编码"),
+          planName: string("专业版", "套餐名称"),
+          benefits: array(string("2000积分/月"), "权益说明"),
+          prices: array(object({
+            priceCode: string("PRO_MONTH", "价格编码"),
+            cycleUnit: string("MONTH", "周期单位"),
+            cycleCount: integer(1, "周期数量"),
+            priceFen: integer(9900, "售价，单位分"),
+            originalPriceFen: integer(19900, "原价，单位分"),
+            grantPoints: integer(2000, "赠送积分")
+          }, "价格配置"), "价格列表"),
+          status: string("ENABLED", "套餐状态")
+        }, "套餐数据"),
+        PlanListData: object({
+          items: array(ref("PlanData"), "套餐列表")
+        }, "套餐列表数据"),
+        TrialApplicationData: object({
+          id: string("100000000000000091", "试用申请 ID"),
+          phone: string("13900139000", "手机号"),
+          contactName: string("试用客户", "联系人称呼"),
+          position: string("运营负责人", "职位"),
+          status: string("SUBMITTED", "申请状态"),
+          orderNo: string("DN202606170001", "关联订单号")
+        }, "试用申请数据"),
+        OrderData: object({
+          orderNo: string("DN202606170001", "订单号"),
+          orderType: string("PLAN", "订单类型"),
+          productCode: string("TEAM_MONTH", "商品编码"),
+          status: string("CREATED", "订单状态"),
+          amountFen: integer(9900, "订单金额，单位分"),
+          payAmountFen: integer(9900, "实付金额，单位分"),
+          currency: string("CNY", "币种"),
+          createdAt: string("2026-06-26T10:00:00.000Z", "创建时间"),
+          paidAt: string(null, "支付时间")
+        }, "订单数据"),
+        OrderPageData: object({
+          records: array(ref("OrderData"), "订单列表"),
+          page: integer(1, "页码"),
+          pageSize: integer(20, "每页数量"),
+          total: integer(100, "总数")
+        }, "订单分页"),
+        PaymentData: object({
+          orderNo: string("DN202606170001", "订单号"),
+          payType: string("WECHAT", "支付方式"),
+          payUrl: string("https://example.com/pay", "支付链接"),
+          qrCodeUrl: string("https://example.com/pay-qrcode", "支付二维码 URL"),
+          channelTransactionNo: string("WX123456789", "渠道交易号"),
+          status: string("PENDING", "支付状态")
+        }, "支付创建结果"),
+        HomeData: object({
+          banners: array(object({}, "首页 Banner"), "首页 Banner 列表"),
+          categories: array(object({}, "分类"), "分类列表"),
+          inspirations: array(object({}, "灵感"), "灵感列表"),
+          workflows: array(ref("WorkflowData"), "推荐工作流")
+        }, "首页聚合数据"),
+        AdminDashboardData: object({
+          userCount: integer(128, "用户总数"),
+          orderCount: integer(32, "订单总数"),
+          paidAmountFen: integer(990000, "支付总金额，单位分"),
+          pointConsumed: integer(2500, "消耗积分总数")
+        }, "后台首页运营概览"),
+        AdminUserData: object({
+          id: string("100000000000000001", "用户 ID"),
+          phoneMasked: string("138****8000", "脱敏手机号"),
+          nickname: string("Daone 用户", "昵称"),
+          avatarUrl: string("https://example.com/avatar.png", "头像 URL"),
+          email: string("user@example.com", "邮箱"),
+          status: string("ENABLED", "用户状态"),
+          role: string("USER", "用户角色"),
+          points: ref("PointAccountData"),
+          createdAt: string("2026-06-26T10:00:00.000Z", "创建时间")
+        }, "后台用户数据"),
+        AdminUserPageData: object({
+          records: array(ref("AdminUserData"), "用户列表"),
+          page: integer(1, "页码"),
+          pageSize: integer(20, "每页数量"),
+          total: integer(100, "总数")
+        }, "后台用户分页"),
+        AdminOrderPageData: object({
+          records: array(ref("OrderData"), "订单列表"),
+          page: integer(1, "页码"),
+          pageSize: integer(20, "每页数量"),
+          total: integer(100, "总数")
+        }, "后台订单分页"),
+        ModelConfigData: object({
+          modelCode: string("IMAGE_GENERAL_V1", "模型编码"),
+          modelName: string("通用图片生成", "模型名称"),
+          basePoints: integer(25, "基础积分"),
+          parameters: object({}, "模型参数配置"),
+          status: string("ENABLED", "模型状态")
+        }, "模型配置"),
+        ModelConfigListData: object({
+          items: array(ref("ModelConfigData"), "模型配置列表")
+        }, "模型配置列表数据"),
+        PromptTemplateData: object({
+          code: string("IMAGE_POSTER", "模板编码"),
+          name: string("图片海报提示词", "模板名称"),
+          scenario: string("IMAGE", "使用场景"),
+          content: string("生成一张商业海报", "模板内容"),
+          status: string("ENABLED", "模板状态")
+        }, "提示词模板"),
+        PromptTemplateListData: object({
+          items: array(ref("PromptTemplateData"), "提示词模板列表")
+        }, "提示词模板列表数据"),
+        InspirationData: object({
+          id: string("100000000000000101", "灵感 ID"),
+          title: string("灵感标题", "标题"),
+          categoryCode: string("BRAND", "分类编码"),
+          coverUrl: string("https://example.com/cover.png", "封面 URL"),
+          prompt: string("生成一张品牌海报", "提示词"),
+          status: string("ENABLED", "灵感状态")
+        }, "灵感数据"),
+        InspirationListData: object({
+          items: array(ref("InspirationData"), "灵感列表")
+        }, "灵感列表数据"),
+        CategoryData: object({
+          categoryCode: string("ECOMMERCE", "分类编码"),
+          categoryName: string("电商营销", "分类名称"),
+          scope: string("ALL", "使用范围"),
+          sortNo: integer(10, "排序"),
+          status: string("ENABLED", "分类状态")
+        }, "分类数据"),
+        CategoryPageData: object({
+          records: array(ref("CategoryData"), "分类列表"),
+          page: integer(1, "页码"),
+          pageSize: integer(20, "每页数量"),
+          total: integer(100, "总数")
+        }, "分类分页"),
+        AdminWorkflowPageData: object({
+          records: array(ref("WorkflowData"), "后台工作流列表"),
+          page: integer(1, "页码"),
+          pageSize: integer(20, "每页数量"),
+          total: integer(100, "总数")
+        }, "后台工作流分页"),
+        InvoiceData: object({
+          id: string("100000000000000111", "开票申请 ID"),
+          userId: string("100000000000000001", "用户 ID"),
+          orderNo: string("DN20260618001", "订单号"),
+          invoiceTitle: string("杭州星图创意有限公司", "发票抬头"),
+          taxNo: string("913301********221X", "税号"),
+          invoiceType: string("VAT_NORMAL", "发票类型"),
+          amountFen: integer(599900, "开票金额，单位分"),
+          status: string("ISSUED", "开票状态"),
+          expressCompany: string("顺丰", "快递公司"),
+          expressNo: string("SF123", "快递单号")
+        }, "开票申请数据"),
+        InvoicePageData: object({
+          records: array(ref("InvoiceData"), "开票申请列表"),
+          page: integer(1, "页码"),
+          pageSize: integer(20, "每页数量"),
+          total: integer(100, "总数")
+        }, "开票申请分页"),
         PointEstimateRequest: object({
           capabilityCode: string("IMAGE_GENERAL_V1", "AI 能力编码"),
           parameters: object({
@@ -298,88 +693,88 @@ export function openApiSpec() {
     },
     security: [{ BearerAuth: [] }],
     paths: {
-      "/v1/auth/sms-codes": { post: op("发送短信验证码", { public: true, body: "SmsCodeRequest" }) },
-      "/v1/auth/sms-login": { post: op("手机验证码登录", { public: true, body: "SmsLoginRequest" }) },
-      "/admin/v1/sms-codes": { post: op("管理后台发送短信验证码", { public: true, body: "AdminSmsCodeRequest" }) },
-      "/admin/v1/sms-login": { post: op("管理后台手机验证码登录", { public: true, body: "AdminSmsLoginRequest" }) },
-      "/v1/auth/wechat/qr-sessions": { post: op("创建微信扫码登录会话", { public: true }) },
-      "/v1/auth/wechat/qr-sessions/{ticket}": { get: op("查询微信扫码状态", { public: true, params: [pathParam("ticket", "微信扫码登录票据")] }) },
+      "/v1/auth/sms-codes": { post: op("发送短信验证码", { public: true, body: "SmsCodeRequest", data: "AuthSmsCodeData" }) },
+      "/v1/auth/sms-login": { post: op("手机验证码登录", { public: true, body: "SmsLoginRequest", data: "AuthLoginData" }) },
+      "/admin/v1/sms-codes": { post: op("管理后台发送短信验证码", { public: true, body: "AdminSmsCodeRequest", data: "AuthSmsCodeData" }) },
+      "/admin/v1/sms-login": { post: op("管理后台手机验证码登录", { public: true, body: "AdminSmsLoginRequest", data: "AuthLoginData" }) },
+      "/v1/auth/wechat/qr-sessions": { post: op("创建微信扫码登录会话", { public: true, data: "QrSessionData" }) },
+      "/v1/auth/wechat/qr-sessions/{ticket}": { get: op("查询微信扫码状态", { public: true, params: [pathParam("ticket", "微信扫码登录票据")], data: "QrStatusData" }) },
       "/v1/auth/logout": { post: op("退出登录") },
-      "/v1/users/me": { get: op("当前用户"), patch: op("修改资料", { body: "UserProfileUpdateRequest" }) },
-      "/v1/points/account": { get: op("积分账户") },
-      "/v1/points/ledger": { get: op("积分流水", { query: [queryParam("direction", "积分方向，如 INCOME、EXPENSE"), ...pageParams()] }) },
-      "/v1/points/ledger/{ledgerId}": { get: op("积分流水详情", { params: [pathParam("ledgerId", "积分流水 ID")] }) },
-      "/v1/projects": { get: op("项目列表", { query: [queryParam("keyword", "项目关键词"), ...pageParams()] }), post: op("创建项目", { body: "ProjectCreateRequest" }) },
-      "/v1/projects/{projectId}": { get: op("项目详情", { params: [projectIdParam()] }), patch: op("修改项目", { params: [projectIdParam()], body: "ProjectUpdateRequest" }), delete: op("删除项目", { params: [projectIdParam()] }) },
-      "/v1/projects/{projectId}/canvas": { get: op("画布详情", { params: [projectIdParam()] }), put: op("保存画布", { params: [projectIdParam()], body: "CanvasSaveRequest" }) },
-      "/v1/projects/{projectId}/element-groups": { get: op("画布元素组列表", { params: [projectIdParam()], query: pageParams() }), post: op("保存画布元素组", { params: [projectIdParam()], body: "CanvasElementGroupSaveRequest" }) },
-      "/v1/projects/{projectId}/versions": { get: op("历史版本列表", { params: [projectIdParam()], query: pageParams() }) },
-      "/v1/projects/{projectId}/versions/{versionId}": { get: op("历史版本详情", { params: [projectIdParam(), pathParam("versionId", "历史版本 ID")] }) },
-      "/v1/projects/{projectId}/versions/{versionId}/restore": { post: op("恢复历史版本", { params: [projectIdParam(), pathParam("versionId", "历史版本 ID")] }) },
-      "/v1/projects/{projectId}/shares": { post: op("创建项目分享", { params: [projectIdParam()], body: "ShareCreateRequest" }) },
+      "/v1/users/me": { get: op("当前用户", { data: "UserProfileData" }), patch: op("修改资料", { body: "UserProfileUpdateRequest", data: "UserProfileData" }) },
+      "/v1/points/account": { get: op("积分账户", { data: "PointAccountData" }) },
+      "/v1/points/ledger": { get: op("积分流水", { query: [queryParam("direction", "积分方向，如 INCOME、EXPENSE"), ...pageParams()], data: "PointLedgerPageData" }) },
+      "/v1/points/ledger/{ledgerId}": { get: op("积分流水详情", { params: [pathParam("ledgerId", "积分流水 ID")], data: "PointLedgerDetailData" }) },
+      "/v1/projects": { get: op("项目列表", { query: [queryParam("keyword", "项目关键词"), ...pageParams()], data: "ProjectPageData" }), post: op("创建项目", { body: "ProjectCreateRequest", data: "ProjectData" }) },
+      "/v1/projects/{projectId}": { get: op("项目详情", { params: [projectIdParam()], data: "ProjectData" }), patch: op("修改项目", { params: [projectIdParam()], body: "ProjectUpdateRequest", data: "ProjectData" }), delete: op("删除项目", { params: [projectIdParam()] }) },
+      "/v1/projects/{projectId}/canvas": { get: op("画布详情", { params: [projectIdParam()], data: "CanvasData" }), put: op("保存画布", { params: [projectIdParam()], body: "CanvasSaveRequest", data: "CanvasData" }) },
+      "/v1/projects/{projectId}/element-groups": { get: op("画布元素组列表", { params: [projectIdParam()], query: pageParams(), data: "ElementGroupPageData" }), post: op("保存画布元素组", { params: [projectIdParam()], body: "CanvasElementGroupSaveRequest", data: "ElementGroupData" }) },
+      "/v1/projects/{projectId}/versions": { get: op("历史版本列表", { params: [projectIdParam()], query: pageParams(), data: "ProjectVersionPageData" }) },
+      "/v1/projects/{projectId}/versions/{versionId}": { get: op("历史版本详情", { params: [projectIdParam(), pathParam("versionId", "历史版本 ID")], data: "ProjectVersionData" }) },
+      "/v1/projects/{projectId}/versions/{versionId}/restore": { post: op("恢复历史版本", { params: [projectIdParam(), pathParam("versionId", "历史版本 ID")], data: "CanvasData" }) },
+      "/v1/projects/{projectId}/shares": { post: op("创建项目分享", { params: [projectIdParam()], body: "ShareCreateRequest", data: "ShareData" }) },
       "/v1/projects/{projectId}/shares/{shareCode}": { delete: op("关闭项目分享", { params: [projectIdParam(), pathParam("shareCode", "分享码")] }) },
-      "/v1/shares/{shareCode}": { get: op("访问分享", { public: true, params: [pathParam("shareCode", "分享码")] }) },
-      "/v1/assets": { get: op("素材列表", { query: [queryParam("scope", "素材范围：FILES、CENTER、RECOMMENDED、FAVORITE"), queryParam("projectId", "项目 ID"), queryParam("type", "素材类型：IMAGE、VIDEO"), queryParam("source", "素材来源：UPLOAD、GENERATED、TEMPLATE"), queryParam("keyword", "文件名关键词"), ...pageParams()] }), post: op("上传本地文件到 OSS 并返回 URL", { body: "AssetCompleteUploadRequest", data: "AssetUploadData" }) },
+      "/v1/shares/{shareCode}": { get: op("访问分享", { public: true, params: [pathParam("shareCode", "分享码")], data: "ShareData" }) },
+      "/v1/assets": { get: op("素材列表", { query: [queryParam("scope", "素材范围：FILES、CENTER、RECOMMENDED、FAVORITE"), queryParam("projectId", "项目 ID"), queryParam("type", "素材类型：IMAGE、VIDEO"), queryParam("source", "素材来源：UPLOAD、GENERATED、TEMPLATE"), queryParam("keyword", "文件名关键词"), ...pageParams()], data: "AssetPageData" }), post: op("上传本地文件到 OSS 并返回 URL", { body: "AssetCompleteUploadRequest", data: "AssetUploadData" }) },
       "/v1/assets/upload-tickets": { post: op("上传本地文件到 OSS 并返回 URL", { body: "UploadTicketRequest", data: "AssetUploadData" }) },
-      "/v1/assets/{assetId}": { get: op("素材详情", { params: [assetIdParam()] }), delete: op("删除素材", { params: [assetIdParam()] }) },
-      "/v1/assets/{assetId}/favorite": { put: op("收藏素材", { params: [assetIdParam()] }), delete: op("取消收藏素材", { params: [assetIdParam()] }) },
-      "/v1/ai/capabilities": { get: op("AI 能力") },
-      "/v1/ai/skills": { get: op("AI 技能") },
-      "/v1/ai/point-estimates": { post: op("预估积分", { body: "PointEstimateRequest" }) },
-      "/v1/ai/prompt-translations": { post: op("提示词翻译", { body: "PromptTranslateRequest" }) },
-      "/v1/generation-tasks": { get: op("任务列表", { query: [queryParam("projectId", "项目 ID"), queryParam("status", "任务状态"), ...pageParams()] }), post: op("创建任务", { headers: [headerParam("Idempotency-Key", "幂等键，建议创建任务时传入")], body: "GenerationTaskCreateRequest" }) },
-      "/v1/generation-tasks/{taskId}": { get: op("任务详情", { params: [pathParam("taskId", "生成任务 ID")] }) },
-      "/v1/generation-tasks/{taskId}/cancel": { post: op("取消任务", { params: [pathParam("taskId", "生成任务 ID")] }) },
-      "/v1/provider/chat/models": { get: op("模型网关可选模型列表", { query: [queryParam("type", "模型类型枚举：chat、image、video；不传默认 chat", { type: "string", enum: ["chat", "image", "video"], default: "chat" })] }) },
+      "/v1/assets/{assetId}": { get: op("素材详情", { params: [assetIdParam()], data: "AssetData" }), delete: op("删除素材", { params: [assetIdParam()] }) },
+      "/v1/assets/{assetId}/favorite": { put: op("收藏素材", { params: [assetIdParam()], data: "AssetData" }), delete: op("取消收藏素材", { params: [assetIdParam()], data: "AssetData" }) },
+      "/v1/ai/capabilities": { get: op("AI 能力", { data: "AiCapabilitiesData" }) },
+      "/v1/ai/skills": { get: op("AI 技能", { data: "AiSkillsData" }) },
+      "/v1/ai/point-estimates": { post: op("预估积分", { body: "PointEstimateRequest", data: "PointEstimateData" }) },
+      "/v1/ai/prompt-translations": { post: op("提示词翻译", { body: "PromptTranslateRequest", data: "PromptTranslationData" }) },
+      "/v1/generation-tasks": { get: op("任务列表", { query: [queryParam("projectId", "项目 ID"), queryParam("status", "任务状态"), ...pageParams()], data: "GenerationTaskPageData" }), post: op("创建任务", { headers: [headerParam("Idempotency-Key", "幂等键，建议创建任务时传入")], body: "GenerationTaskCreateRequest", data: "GenerationTaskData" }) },
+      "/v1/generation-tasks/{taskId}": { get: op("任务详情", { params: [pathParam("taskId", "生成任务 ID")], data: "GenerationTaskData" }) },
+      "/v1/generation-tasks/{taskId}/cancel": { post: op("取消任务", { params: [pathParam("taskId", "生成任务 ID")], data: "GenerationTaskData" }) },
+      "/v1/provider/chat/models": { get: op("模型网关可选模型列表", { query: [queryParam("type", "模型类型枚举：chat、image、video；不传默认 chat", { type: "string", enum: ["chat", "image", "video"], default: "chat" })], data: "ProviderModelsData" }) },
       "/v1/provider/chat/completions": { post: op("302.AI 聊天模型网关，支持 ChatGPT/OpenAI SSE", { body: "ProviderChatCompletionRequest" }) },
       "/v1/provider/images/generations": { post: op("302.AI 图片生成模型网关", { body: "ProviderImageGenerationRequest" }) },
       "/v1/provider/videos/generations": { post: op("官方视频模型网关，支持 Seedance 2.0 和 HappyHorse", { body: "ProviderVideoGenerationRequest" }) },
-      "/v1/provider/tools": { get: op("模型小工具白名单") },
+      "/v1/provider/tools": { get: op("模型小工具白名单", { data: "ProviderToolsData" }) },
       "/v1/provider/tools/{toolCode}": { post: op("302.AI 小工具网关", { params: [pathParam("toolCode", "工具编码")], body: "ProviderToolRequest" }) },
-      "/v1/chat-sessions": { get: op("对话列表", { query: [queryParam("projectId", "项目 ID"), ...pageParams()] }), post: op("创建对话", { body: "ChatSessionCreateRequest" }) },
+      "/v1/chat-sessions": { get: op("对话列表", { query: [queryParam("projectId", "项目 ID"), ...pageParams()], data: "ChatSessionPageData" }), post: op("创建对话", { body: "ChatSessionCreateRequest", data: "ChatSessionData" }) },
       "/v1/chat-sessions/{sessionId}": { delete: op("删除对话", { params: [pathParam("sessionId", "对话 ID")] }) },
-      "/v1/chat-sessions/{sessionId}/messages": { get: op("对话消息列表", { params: [pathParam("sessionId", "对话 ID")], query: pageParams() }), post: op("发送对话消息", { params: [pathParam("sessionId", "对话 ID")], body: "ChatMessageCreateRequest" }) },
-      "/v1/workflows": { get: op("工作流列表", { query: [queryParam("keyword", "工作流关键词"), ...pageParams()] }), post: op("保存工作流", { body: "WorkflowSaveRequest" }) },
-      "/v1/workflows/{workflowId}": { get: op("工作流详情", { params: [pathParam("workflowId", "工作流 ID")] }), put: op("修改工作流", { params: [pathParam("workflowId", "工作流 ID")], body: "WorkflowSaveRequest" }), delete: op("删除工作流", { params: [pathParam("workflowId", "工作流 ID")] }) },
-      "/v1/workflows/{workflowId}/projects": { post: op("从工作流创建项目", { params: [pathParam("workflowId", "工作流 ID")], body: "WorkflowProjectCreateRequest" }) },
-      "/v1/plans": { get: op("套餐列表", { public: true }) },
-      "/v1/trial-applications/sms-codes": { post: op("发送试用申请短信验证码", { public: true, body: "TrialSmsCodeRequest" }) },
-      "/v1/trial-applications": { post: op("提交试用申请并创建试用订单", { public: true, headers: [headerParam("Idempotency-Key", "幂等键，可选")], body: "TrialApplicationRequest" }) },
-      "/v1/orders": { get: op("订单列表", { query: [queryParam("status", "订单状态"), ...pageParams()] }), post: op("创建订单", { headers: [headerParam("Idempotency-Key", "幂等键，必填")], body: "OrderCreateRequest" }) },
-      "/v1/orders/{orderNo}": { get: op("订单详情", { params: [pathParam("orderNo", "订单号")] }) },
-      "/v1/orders/{orderNo}/payments": { post: op("创建支付", { params: [pathParam("orderNo", "订单号")], body: "PaymentCreateRequest" }) },
+      "/v1/chat-sessions/{sessionId}/messages": { get: op("对话消息列表", { params: [pathParam("sessionId", "对话 ID")], query: pageParams(), data: "ChatMessagePageData" }), post: op("发送对话消息", { params: [pathParam("sessionId", "对话 ID")], body: "ChatMessageCreateRequest", data: "ChatMessageData" }) },
+      "/v1/workflows": { get: op("工作流列表", { query: [queryParam("keyword", "工作流关键词"), ...pageParams()], data: "WorkflowPageData" }), post: op("保存工作流", { body: "WorkflowSaveRequest", data: "WorkflowData" }) },
+      "/v1/workflows/{workflowId}": { get: op("工作流详情", { params: [pathParam("workflowId", "工作流 ID")], data: "WorkflowData" }), put: op("修改工作流", { params: [pathParam("workflowId", "工作流 ID")], body: "WorkflowSaveRequest", data: "WorkflowData" }), delete: op("删除工作流", { params: [pathParam("workflowId", "工作流 ID")] }) },
+      "/v1/workflows/{workflowId}/projects": { post: op("从工作流创建项目", { params: [pathParam("workflowId", "工作流 ID")], body: "WorkflowProjectCreateRequest", data: "ProjectData" }) },
+      "/v1/plans": { get: op("套餐列表", { public: true, data: "PlanListData" }) },
+      "/v1/trial-applications/sms-codes": { post: op("发送试用申请短信验证码", { public: true, body: "TrialSmsCodeRequest", data: "AuthSmsCodeData" }) },
+      "/v1/trial-applications": { post: op("提交试用申请并创建试用订单", { public: true, headers: [headerParam("Idempotency-Key", "幂等键，可选")], body: "TrialApplicationRequest", data: "TrialApplicationData" }) },
+      "/v1/orders": { get: op("订单列表", { query: [queryParam("status", "订单状态"), ...pageParams()], data: "OrderPageData" }), post: op("创建订单", { headers: [headerParam("Idempotency-Key", "幂等键，必填")], body: "OrderCreateRequest", data: "OrderData" }) },
+      "/v1/orders/{orderNo}": { get: op("订单详情", { params: [pathParam("orderNo", "订单号")], data: "OrderData" }) },
+      "/v1/orders/{orderNo}/payments": { post: op("创建支付", { params: [pathParam("orderNo", "订单号")], body: "PaymentCreateRequest", data: "PaymentData" }) },
       "/v1/orders/{orderNo}/mock-paid": { post: op("本地模拟支付成功", { params: [pathParam("orderNo", "订单号")] }) },
       "/v1/payments/{payType}/notify": { post: op("支付服务端通知", { public: true, params: [pathParam("payType", "支付方式：WECHAT、ALIPAY")], headers: [headerParam("X-Daone-Payment-Signature", "微信占位回调签名；支付宝回调不使用该请求头")], body: "PaymentNotifyRequest" }) },
       "/v1/subscriptions/cancel-auto-renew": { post: op("取消自动续费") },
-      "/v1/home": { get: op("首页聚合", { public: true, query: [queryParam("categoryCode", "灵感分类编码，默认 ALL")] }) },
-      "/admin/v1/dashboard": { get: op("后台首页运营概览") },
-      "/admin/v1/users": { get: op("后台用户列表", { query: [queryParam("keyword", "关键词"), queryParam("status", "用户状态"), ...pageParams()] }) },
-      "/admin/v1/users/{userId}": { get: op("后台用户详情", { params: [pathParam("userId", "用户 ID")] }) },
-      "/admin/v1/users/{userId}/status": { patch: op("修改用户状态", { params: [pathParam("userId", "用户 ID")], body: "AdminUserStatusRequest" }) },
-      "/admin/v1/users/{userId}/point-adjustments": { post: op("人工调整积分", { params: [pathParam("userId", "用户 ID")], body: "AdminPointAdjustmentRequest" }) },
-      "/admin/v1/orders": { get: op("后台订单列表", { query: [queryParam("keyword", "关键词"), queryParam("status", "订单状态"), queryParam("payType", "支付方式"), queryParam("dateFrom", "开始日期"), queryParam("dateTo", "结束日期"), ...pageParams()] }) },
-      "/admin/v1/orders/{orderNo}": { get: op("后台订单详情", { params: [pathParam("orderNo", "订单号")] }) },
-      "/admin/v1/plans": { get: op("后台套餐列表"), post: op("创建套餐", { body: "AdminPlanSaveRequest" }) },
-      "/admin/v1/plans/{planCode}": { get: op("套餐详情", { params: [pathParam("planCode", "套餐编码")] }), put: op("修改套餐", { params: [pathParam("planCode", "套餐编码")], body: "AdminPlanSaveRequest" }), delete: op("删除套餐", { params: [pathParam("planCode", "套餐编码")] }) },
-      "/admin/v1/plans/{planCode}/status": { patch: op("修改套餐状态", { params: [pathParam("planCode", "套餐编码")], body: "AdminPlanStatusRequest" }) },
-      "/admin/v1/model-configs": { get: op("模型配置列表") },
-      "/admin/v1/model-configs/{modelCode}": { get: op("模型配置详情", { params: [pathParam("modelCode", "模型编码")] }), put: op("修改模型配置", { params: [pathParam("modelCode", "模型编码")], body: "AdminModelConfigRequest" }) },
-      "/admin/v1/model-configs/{modelCode}/status": { patch: op("修改模型状态", { params: [pathParam("modelCode", "模型编码")], body: "AdminModelStatusRequest" }) },
-      "/admin/v1/prompt-templates": { get: op("提示词模板列表"), post: op("创建提示词模板", { body: "AdminPromptTemplateSaveRequest" }) },
-      "/admin/v1/prompt-templates/{code}": { get: op("提示词模板详情", { params: [pathParam("code", "模板编码")] }), put: op("修改提示词模板", { params: [pathParam("code", "模板编码")], body: "AdminPromptTemplateSaveRequest" }), delete: op("删除提示词模板", { params: [pathParam("code", "模板编码")] }) },
-      "/admin/v1/prompt-templates/{code}/status": { patch: op("修改提示词模板状态", { params: [pathParam("code", "模板编码")], body: "AdminPlanStatusRequest" }) },
-      "/admin/v1/inspirations": { get: op("后台灵感列表"), post: op("创建灵感", { body: "AdminInspirationSaveRequest" }) },
-      "/admin/v1/inspirations/{id}": { get: op("灵感详情", { params: [pathParam("id", "灵感 ID")] }), put: op("修改灵感", { params: [pathParam("id", "灵感 ID")], body: "AdminInspirationSaveRequest" }), delete: op("删除灵感", { params: [pathParam("id", "灵感 ID")] }) },
-      "/admin/v1/inspirations/{id}/status": { patch: op("修改灵感状态", { params: [pathParam("id", "灵感 ID")], body: "AdminPlanStatusRequest" }) },
-      "/admin/v1/categories": { get: op("分类列表", { query: [queryParam("keyword", "关键词"), queryParam("status", "状态"), queryParam("scope", "使用范围"), ...pageParams()] }), post: op("创建分类", { body: "AdminCategorySaveRequest" }) },
-      "/admin/v1/categories/{code}": { get: op("分类详情", { params: [pathParam("code", "分类编码")] }), put: op("修改分类", { params: [pathParam("code", "分类编码")], body: "AdminCategorySaveRequest" }), delete: op("删除分类", { params: [pathParam("code", "分类编码")] }) },
-      "/admin/v1/categories/{code}/status": { patch: op("修改分类状态", { params: [pathParam("code", "分类编码")], body: "AdminPlanStatusRequest" }) },
-      "/admin/v1/workflows": { get: op("后台工作流列表", { query: [queryParam("keyword", "关键词"), queryParam("status", "状态"), queryParam("categoryCode", "分类编码"), ...pageParams()] }), post: op("创建后台工作流", { body: "AdminWorkflowSaveRequest" }) },
-      "/admin/v1/workflows/{workflowId}": { get: op("后台工作流详情", { params: [pathParam("workflowId", "工作流 ID")] }), put: op("修改后台工作流", { params: [pathParam("workflowId", "工作流 ID")], body: "AdminWorkflowSaveRequest" }), delete: op("删除后台工作流", { params: [pathParam("workflowId", "工作流 ID")] }) },
-      "/admin/v1/workflows/{workflowId}/status": { patch: op("修改后台工作流状态", { params: [pathParam("workflowId", "工作流 ID")], body: "AdminPlanStatusRequest" }) },
-      "/admin/v1/invoices": { get: op("开票申请列表", { query: [queryParam("keyword", "关键词"), queryParam("status", "状态"), queryParam("invoiceType", "发票类型"), queryParam("dateFrom", "开始日期"), queryParam("dateTo", "结束日期"), ...pageParams()] }), post: op("创建开票申请", { body: "AdminInvoiceSaveRequest" }) },
-      "/admin/v1/invoices/{invoiceId}": { get: op("开票详情", { params: [pathParam("invoiceId", "开票申请 ID")] }), put: op("修改开票申请", { params: [pathParam("invoiceId", "开票申请 ID")], body: "AdminInvoiceSaveRequest" }), delete: op("删除开票申请", { params: [pathParam("invoiceId", "开票申请 ID")] }) },
-      "/admin/v1/invoices/{invoiceId}/status": { patch: op("修改开票状态", { params: [pathParam("invoiceId", "开票申请 ID")], body: "AdminInvoiceStatusRequest" }) },
+      "/v1/home": { get: op("首页聚合", { public: true, query: [queryParam("categoryCode", "灵感分类编码，默认 ALL")], data: "HomeData" }) },
+      "/admin/v1/dashboard": { get: op("后台首页运营概览", { data: "AdminDashboardData" }) },
+      "/admin/v1/users": { get: op("后台用户列表", { query: [queryParam("keyword", "关键词"), queryParam("status", "用户状态"), ...pageParams()], data: "AdminUserPageData" }) },
+      "/admin/v1/users/{userId}": { get: op("后台用户详情", { params: [pathParam("userId", "用户 ID")], data: "AdminUserData" }) },
+      "/admin/v1/users/{userId}/status": { patch: op("修改用户状态", { params: [pathParam("userId", "用户 ID")], body: "AdminUserStatusRequest", data: "AdminUserData" }) },
+      "/admin/v1/users/{userId}/point-adjustments": { post: op("人工调整积分", { params: [pathParam("userId", "用户 ID")], body: "AdminPointAdjustmentRequest", data: "PointLedgerData" }) },
+      "/admin/v1/orders": { get: op("后台订单列表", { query: [queryParam("keyword", "关键词"), queryParam("status", "订单状态"), queryParam("payType", "支付方式"), queryParam("dateFrom", "开始日期"), queryParam("dateTo", "结束日期"), ...pageParams()], data: "AdminOrderPageData" }) },
+      "/admin/v1/orders/{orderNo}": { get: op("后台订单详情", { params: [pathParam("orderNo", "订单号")], data: "OrderData" }) },
+      "/admin/v1/plans": { get: op("后台套餐列表", { data: "PlanListData" }), post: op("创建套餐", { body: "AdminPlanSaveRequest", data: "PlanData" }) },
+      "/admin/v1/plans/{planCode}": { get: op("套餐详情", { params: [pathParam("planCode", "套餐编码")], data: "PlanData" }), put: op("修改套餐", { params: [pathParam("planCode", "套餐编码")], body: "AdminPlanSaveRequest", data: "PlanData" }), delete: op("删除套餐", { params: [pathParam("planCode", "套餐编码")] }) },
+      "/admin/v1/plans/{planCode}/status": { patch: op("修改套餐状态", { params: [pathParam("planCode", "套餐编码")], body: "AdminPlanStatusRequest", data: "PlanData" }) },
+      "/admin/v1/model-configs": { get: op("模型配置列表", { data: "ModelConfigListData" }) },
+      "/admin/v1/model-configs/{modelCode}": { get: op("模型配置详情", { params: [pathParam("modelCode", "模型编码")], data: "ModelConfigData" }), put: op("修改模型配置", { params: [pathParam("modelCode", "模型编码")], body: "AdminModelConfigRequest", data: "ModelConfigData" }) },
+      "/admin/v1/model-configs/{modelCode}/status": { patch: op("修改模型状态", { params: [pathParam("modelCode", "模型编码")], body: "AdminModelStatusRequest", data: "ModelConfigData" }) },
+      "/admin/v1/prompt-templates": { get: op("提示词模板列表", { data: "PromptTemplateListData" }), post: op("创建提示词模板", { body: "AdminPromptTemplateSaveRequest", data: "PromptTemplateData" }) },
+      "/admin/v1/prompt-templates/{code}": { get: op("提示词模板详情", { params: [pathParam("code", "模板编码")], data: "PromptTemplateData" }), put: op("修改提示词模板", { params: [pathParam("code", "模板编码")], body: "AdminPromptTemplateSaveRequest", data: "PromptTemplateData" }), delete: op("删除提示词模板", { params: [pathParam("code", "模板编码")] }) },
+      "/admin/v1/prompt-templates/{code}/status": { patch: op("修改提示词模板状态", { params: [pathParam("code", "模板编码")], body: "AdminPlanStatusRequest", data: "PromptTemplateData" }) },
+      "/admin/v1/inspirations": { get: op("后台灵感列表", { data: "InspirationListData" }), post: op("创建灵感", { body: "AdminInspirationSaveRequest", data: "InspirationData" }) },
+      "/admin/v1/inspirations/{id}": { get: op("灵感详情", { params: [pathParam("id", "灵感 ID")], data: "InspirationData" }), put: op("修改灵感", { params: [pathParam("id", "灵感 ID")], body: "AdminInspirationSaveRequest", data: "InspirationData" }), delete: op("删除灵感", { params: [pathParam("id", "灵感 ID")] }) },
+      "/admin/v1/inspirations/{id}/status": { patch: op("修改灵感状态", { params: [pathParam("id", "灵感 ID")], body: "AdminPlanStatusRequest", data: "InspirationData" }) },
+      "/admin/v1/categories": { get: op("分类列表", { query: [queryParam("keyword", "关键词"), queryParam("status", "状态"), queryParam("scope", "使用范围"), ...pageParams()], data: "CategoryPageData" }), post: op("创建分类", { body: "AdminCategorySaveRequest", data: "CategoryData" }) },
+      "/admin/v1/categories/{code}": { get: op("分类详情", { params: [pathParam("code", "分类编码")], data: "CategoryData" }), put: op("修改分类", { params: [pathParam("code", "分类编码")], body: "AdminCategorySaveRequest", data: "CategoryData" }), delete: op("删除分类", { params: [pathParam("code", "分类编码")] }) },
+      "/admin/v1/categories/{code}/status": { patch: op("修改分类状态", { params: [pathParam("code", "分类编码")], body: "AdminPlanStatusRequest", data: "CategoryData" }) },
+      "/admin/v1/workflows": { get: op("后台工作流列表", { query: [queryParam("keyword", "关键词"), queryParam("status", "状态"), queryParam("categoryCode", "分类编码"), ...pageParams()], data: "AdminWorkflowPageData" }), post: op("创建后台工作流", { body: "AdminWorkflowSaveRequest", data: "WorkflowData" }) },
+      "/admin/v1/workflows/{workflowId}": { get: op("后台工作流详情", { params: [pathParam("workflowId", "工作流 ID")], data: "WorkflowData" }), put: op("修改后台工作流", { params: [pathParam("workflowId", "工作流 ID")], body: "AdminWorkflowSaveRequest", data: "WorkflowData" }), delete: op("删除后台工作流", { params: [pathParam("workflowId", "工作流 ID")] }) },
+      "/admin/v1/workflows/{workflowId}/status": { patch: op("修改后台工作流状态", { params: [pathParam("workflowId", "工作流 ID")], body: "AdminPlanStatusRequest", data: "WorkflowData" }) },
+      "/admin/v1/invoices": { get: op("开票申请列表", { query: [queryParam("keyword", "关键词"), queryParam("status", "状态"), queryParam("invoiceType", "发票类型"), queryParam("dateFrom", "开始日期"), queryParam("dateTo", "结束日期"), ...pageParams()], data: "InvoicePageData" }), post: op("创建开票申请", { body: "AdminInvoiceSaveRequest", data: "InvoiceData" }) },
+      "/admin/v1/invoices/{invoiceId}": { get: op("开票详情", { params: [pathParam("invoiceId", "开票申请 ID")], data: "InvoiceData" }), put: op("修改开票申请", { params: [pathParam("invoiceId", "开票申请 ID")], body: "AdminInvoiceSaveRequest", data: "InvoiceData" }), delete: op("删除开票申请", { params: [pathParam("invoiceId", "开票申请 ID")] }) },
+      "/admin/v1/invoices/{invoiceId}/status": { patch: op("修改开票状态", { params: [pathParam("invoiceId", "开票申请 ID")], body: "AdminInvoiceStatusRequest", data: "InvoiceData" }) },
       "/mock-files/upload": { post: op("本地 Mock 上传，仅 storage mock 启用时可用", { public: true }) },
       "/mock-files/{objectKey}": { get: op("本地 Mock 文件读取，仅 storage mock 启用时可用", { public: true, params: [pathParam("objectKey", "Mock 文件对象 Key")] }) },
       "/health": { get: op("健康检查与环境配置状态", { public: true }) },
