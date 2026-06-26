@@ -382,7 +382,26 @@ describe("Daone Vercel Node API", () => {
     assert.equal(response.body.code, "OK");
     assert.ok(response.body.data.items.some((item) => item.code === "gpt5.5" && item.model === "gpt-5.5"));
     assert.ok(response.body.data.items.some((item) => item.code === "gemini-3-1-pro-preview" && item.model === "gemini-3.1-pro-preview"));
+    assert.ok(response.body.data.items.every((item) => item.type === "MULTIMODAL_CHAT" && item.gateway === "CHAT"));
     assert.ok(response.body.data.items.every((item) => item.supportsStreaming === true));
+
+    response = await request("GET", "/api/v1/provider/chat/models?type=image", null, token);
+    assert.equal(response.status, 200);
+    assert.ok(response.body.data.items.some((item) => item.code === "image2.0" && item.model === "gpt-image-2"));
+    assert.ok(response.body.data.items.some((item) => item.code === "nanobanana-2.0" && item.model === "gemini-3.1-flash-image-preview"));
+    assert.ok(response.body.data.items.every((item) => item.type === "IMAGE_GENERATION" && item.gateway === "IMAGE"));
+    assert.ok(!response.body.data.items.some((item) => item.code === "gpt5.5"));
+
+    response = await request("GET", "/api/v1/provider/chat/models?type=video", null, token);
+    assert.equal(response.status, 200);
+    assert.ok(response.body.data.items.some((item) => item.code === "seedance2.0" && item.model === "seedance2.0"));
+    assert.ok(response.body.data.items.some((item) => item.code === "happy-horse" && item.model === "happy-horse"));
+    assert.ok(response.body.data.items.every((item) => item.type === "VIDEO_GENERATION" && item.gateway === "VIDEO"));
+    assert.ok(!response.body.data.items.some((item) => item.code === "image2.0"));
+
+    response = await request("GET", "/api/v1/provider/chat/models?type=audio", null, token);
+    assert.equal(response.status, 400);
+    assert.equal(response.body.code, "PROVIDER_MODEL_TYPE_NOT_SUPPORTED");
 
     response = await request("POST", "/api/v1/provider/chat/completions", {
       model: "gemini-3-1-pro-preview",

@@ -88,7 +88,9 @@ router.post("/api/v1/generation-tasks", async ({ user, body, req }) => aiService
 router.get("/api/v1/generation-tasks", async ({ user, url }) => page(aiService.listTasks(user.id, Object.fromEntries(url.searchParams)), url));
 router.get("/api/v1/generation-tasks/:taskId", async ({ user, params }) => aiService.getTask(user.id, params.taskId));
 router.post("/api/v1/generation-tasks/:taskId/cancel", async ({ user, params }) => aiService.cancelTask(user.id, params.taskId));
-router.get("/api/v1/provider/chat/models", async () => ({ items: modelClient.supportedChatModels() }));
+router.get("/api/v1/provider/chat/models", async ({ url }) => ({
+  items: modelClient.supportedProviderModels(url.searchParams.get("type") || url.searchParams.get("modelType") || url.searchParams.get("gateway"))
+}));
 router.post("/api/v1/provider/chat/completions", async ({ body }) => {
   if (body.stream) {
     return providerStream(await modelClient.createChatCompletionStream(body));
