@@ -565,6 +565,8 @@ export function docsHtml() {
     .auth input{flex:1;min-width:220px;height:34px;border:1px solid var(--line-strong);border-radius:6px;padding:0 10px;outline:none}
     .auth button,.copy-btn,.send-btn{height:34px;border:0;border-radius:6px;background:var(--primary);color:#fff;padding:0 12px;cursor:pointer}
     .send-btn:disabled{background:#94a3b8;cursor:not-allowed}
+    .auth-status{min-width:56px;color:var(--green);font-size:12px;white-space:nowrap}
+    .auth-status.error{color:var(--red)}
     .section{margin-bottom:16px;overflow:hidden}
     .section-header{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line);background:var(--panel-soft)}
     .section-title{font-weight:700;font-size:16px}
@@ -641,8 +643,9 @@ export function docsHtml() {
             <button class="tab active" data-view="docs">接口文档</button>
             <button class="tab" data-view="schemas">数据模型</button>
             <div class="auth">
-              <input id="token" type="password" placeholder="Bearer Token，用于调试时生成 Authorization 头" />
+              <input id="token" type="password" placeholder="登录 Token，支持 Bearer xxx 或纯 token" />
               <button id="save-token" type="button">保存</button>
+              <span id="token-status" class="auth-status"></span>
             </div>
           </div>
           <section id="docs-view"></section>
@@ -663,6 +666,36 @@ export function docsHtml() {
         .replaceAll(">", "&gt;")
         .replaceAll('"', "&quot;")
         .replaceAll("'", "&#039;");
+    }
+
+    function tokenFromObject(value) {
+      if (!value || typeof value !== "object") return "";
+      return value.token || value.accessToken || value.access_token || value.jwt || tokenFromObject(value.data) || "";
+    }
+
+    function normalizeToken(value) {
+      let token = String(value || "").trim();
+      if (!token) return "";
+      if ((token.startsWith("{") && token.endsWith("}")) || (token.startsWith('"') && token.endsWith('"'))) {
+        try {
+          const parsed = JSON.parse(token);
+          token = typeof parsed === "string" ? parsed : tokenFromObject(parsed);
+        } catch {
+          token = String(value || "").trim();
+        }
+      }
+      token = token.trim();
+      if (token.toLowerCase().startsWith("bearer ")) token = token.slice(7).trim();
+      return token;
+    }
+
+    function authHeaderValue(value) {
+      const token = normalizeToken(value);
+      return token ? "Bearer " + token : "";
+    }
+
+    function savedToken() {
+      return normalizeToken(localStorage.getItem("daone-doc-token") || "");
     }
 
     function resolveRef(ref) {
@@ -784,10 +817,10 @@ export function docsHtml() {
 
     function renderCurl(item) {
       const server = state.spec.servers?.[0]?.url || "";
-      const token = localStorage.getItem("daone-doc-token") || "";
+      const authHeader = authHeaderValue(savedToken());
       const continuation = " " + String.fromCharCode(92, 10);
       const lines = ["curl -X " + methodNames[item.method] + " '" + server + item.path + "'"];
-      if (token) lines.push("  -H 'Authorization: Bearer " + token + "'");
+      if (authHeader) lines.push("  -H 'Authorization: " + authHeader + "'");
       if (item.operation.requestBody) {
         lines.push("  -H 'Content-Type: application/json'");
         lines.push("  -d '" + JSON.stringify(schemaExample(item.operation.requestBody.content?.["application/json"]?.schema)) + "'");
@@ -863,8 +896,8 @@ export function docsHtml() {
       });
       const url = new URL(path, window.location.origin);
       query.forEach(([name, value]) => url.searchParams.append(name, value));
-      const token = document.getElementById("token").value.trim() || localStorage.getItem("daone-doc-token") || "";
-      if (token) headers.Authorization = "Bearer " + token;
+      const authHeader = authHeaderValue(document.getElementById("token").value || savedToken());
+      if (authHeader) headers.Authorization = authHeader;
       const bodyControl = document.querySelector("[data-debug-body]");
       let body = null;
       if (bodyControl) {
@@ -942,12 +975,30 @@ export function docsHtml() {
       renderNav();
     });
 
+    document.getElementById("token").addEventListener("input", () => {
+      document.getElementById("token-status").textContent = "";
+      document.getElementById("token-status").classList.remove("error");
+    });
+
     document.getElementById("save-token").addEventListener("click", () => {
-      localStorage.setItem("daone-doc-token", document.getElementById("token").value.trim());
+      const tokenInput = document.getElementById("token");
+      const tokenStatus = document.getElementById("token-status");
+      const token = normalizeToken(tokenInput.value);
+      tokenStatus.classList.remove("error");
+      if (!token) {
+        localStorage.removeItem("daone-doc-token");
+        tokenStatus.textContent = "已清空";
+        renderDocs();
+        return;
+      }
+      localStorage.setItem("daone-doc-token", token);
+      tokenInput.value = token;
+      tokenStatus.textContent = "已保存";
+      renderDocs();
     });
 
     async function init() {
-      const token = localStorage.getItem("daone-doc-token") || "";
+      const token = savedToken();
       document.getElementById("token").value = token;
       const response = await fetch("/api/v3/swagger");
       state.spec = await response.json();
