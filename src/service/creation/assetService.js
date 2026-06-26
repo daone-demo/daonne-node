@@ -6,12 +6,19 @@ import { badGateway, badRequest, forbidden, notFound } from "../common/errors.js
 import { requireProject } from "./projectService.js";
 import { reviewAsset } from "../../infrastructure/middleware/contentSafetyClient.js";
 
+const MB = 1024 * 1024;
+const MAX_UPLOAD_SIZE_BY_TYPE = {
+  IMAGE: 10 * MB,
+  VIDEO: 50 * MB
+};
+
 export async function createUploadTicket(userId, body) {
   const upload = normalizeUploadBody(body);
   if (!upload.fileName || !upload.contentType || !upload.fileSize) {
     throw badRequest("PARAM_INVALID", "fileName、contentType、fileSize 不能为空");
   }
   const type = mediaType(upload.contentType);
+  validateUploadSize(type, upload.fileSize);
   if (upload.projectId) {
     requireProject(userId, upload.projectId);
   }
@@ -201,6 +208,13 @@ function mediaType(contentType) {
   if (contentType.startsWith("image/")) return "IMAGE";
   if (contentType.startsWith("video/")) return "VIDEO";
   throw badRequest("FILE_TYPE_NOT_SUPPORTED", "仅支持图片和视频");
+}
+
+function validateUploadSize(type, fileSize) {
+  const maxSize = MAX_UPLOAD_SIZE_BY_TYPE[type];
+  if (Number(fileSize) > maxSize) {
+    throw badRequest("FILE_SIZE_TOO_LARGE", `上传文件过大，图片最大 10M，视频最大 50M`);
+  }
 }
 
 async function safeReviewAsset(asset) {

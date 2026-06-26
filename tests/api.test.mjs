@@ -410,7 +410,7 @@ describe("Daone Vercel Node API", () => {
 
     response = await request("GET", `/api/v1/assets?scope=FILES&projectId=${projectId}`, null, token);
     assert.equal(response.status, 200);
-    assert.equal(response.body.data.records.length, 3);
+    assert.equal(response.body.data.records.length, 5);
     assert.equal(response.body.data.items, undefined);
 
     response = await request("GET", "/api/v1/assets?scope=CENTER", null, token);
