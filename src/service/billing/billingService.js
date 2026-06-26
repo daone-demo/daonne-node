@@ -10,6 +10,7 @@ const billingLog = createLogger("billing");
 const paymentLog = createLogger("payment");
 const subscriptionLog = createLogger("subscription");
 const pointsLog = createLogger("points");
+const PAYMENT_NOTIFY_MARKER = "[PAYMENT_NOTIFY]";
 
 export function plans() {
   return [...store.prices.values()]
@@ -165,48 +166,66 @@ export function completeLocalPayment(userId, orderNo) {
 }
 
 export function notifyPayment(payType, body, headers = {}) {
-  paymentLog.info("payment.notify_received", "Payment notify received", {
+  paymentLog.info("payment.notify_received", paymentNotifyMessage("Payment notify received"), paymentNotifyFields(payType, {
     payType,
-    orderNo: body?.orderNo || body?.out_trade_no || null
-  });
+    orderNo: notifyOrderNo(payType, body),
+    channelTransactionNo: notifyChannelTransactionNo(payType, body),
+    paymentStatus: notifyPaymentStatus(payType, body),
+    amountFen: notifyAmountFen(payType, body),
+    currency: notifyCurrency(payType, body),
+    mockEnabled: appConfig.payment.mockEnabled
+  }));
   let payment;
   try {
     payment = parsePaymentNotify(payType, body, headers);
   } catch (error) {
-    paymentLog.warn("payment.notify_rejected", "Payment notify rejected", {
+    paymentLog.warn("payment.notify_rejected", paymentNotifyMessage("Payment notify rejected"), paymentNotifyFields(payType, {
       payType,
-      orderNo: body?.orderNo || body?.out_trade_no || null,
+      orderNo: notifyOrderNo(payType, body),
+      channelTransactionNo: notifyChannelTransactionNo(payType, body),
+      paymentStatus: notifyPaymentStatus(payType, body),
       ...errorFields(error)
-    });
+    }));
     throw error;
   }
+  paymentLog.info("payment.notify_verified", paymentNotifyMessage("Payment notify verified"), paymentNotifyFields(payType, {
+    payType,
+    orderNo: payment.orderNo,
+    channelTransactionNo: payment.channelTransactionNo || null,
+    amountFen: payment.amountFen,
+    currency: payment.currency,
+    paymentStatus: payment.paymentStatus || null
+  }));
   const order = store.orders.get(payment.orderNo);
   if (!order) {
-    paymentLog.warn("payment.notify_order_missing", "Payment notify order missing", {
+    paymentLog.warn("payment.notify_order_missing", paymentNotifyMessage("Payment notify order missing"), paymentNotifyFields(payType, {
       payType,
       orderNo: payment.orderNo,
       amountFen: payment.amountFen,
       currency: payment.currency
-    });
+    }));
     throw notFound("订单不存在");
   }
   if (order.amountFen !== payment.amountFen || order.currency !== payment.currency) {
-    paymentLog.warn("payment.amount_mismatch", "Payment notify amount or currency mismatch", {
+    paymentLog.warn("payment.amount_mismatch", paymentNotifyMessage("Payment notify amount or currency mismatch"), paymentNotifyFields(payType, {
       payType,
       orderNo: payment.orderNo,
       expectedAmountFen: order.amountFen,
       actualAmountFen: payment.amountFen,
       expectedCurrency: order.currency,
       actualCurrency: payment.currency
-    });
+    }));
     throw conflict("PAYMENT_AMOUNT_MISMATCH", "支付金额或币种不一致");
   }
-  completeOrder(order, payment.channelTransactionNo || `${payType}-${Date.now()}`);
-  paymentLog.info("payment.notify_processed", "Payment notify processed", {
+  const completion = completeOrder(order, payment.channelTransactionNo || `${payType}-${Date.now()}`, paymentNotifyFields(payType, { payType }));
+  paymentLog.info("payment.notify_processed", paymentNotifyMessage("Payment notify processed"), paymentNotifyFields(payType, {
     payType,
     orderNo: payment.orderNo,
-    channelTransactionNo: payment.channelTransactionNo || null
-  });
+    channelTransactionNo: payment.channelTransactionNo || null,
+    completed: completion.completed,
+    idempotent: completion.idempotent,
+    updatedTransactionCount: completion.updatedTransactionCount
+  }));
   return payType === "ALIPAY" ? "success" : "SUCCESS";
 }
 
@@ -218,14 +237,22 @@ export function cancelAutoRenew(userId) {
   }
 }
 
-function completeOrder(order, channelTransactionNo) {
+function completeOrder(order, channelTransactionNo, logMeta = {}) {
   if (order.status === "PAID") {
-    billingLog.info("order.complete_idempotent_skip", "Paid order completion skipped", {
-      userId: order.userId,
-      orderNo: order.orderNo,
-      channelTransactionNo
-    });
-    return;
+    billingLog.info(
+      "order.complete_idempotent_skip",
+      markedMessage(logMeta, "Paid order completion skipped"),
+      markedFields(logMeta, {
+        userId: order.userId,
+        orderNo: order.orderNo,
+        channelTransactionNo
+      })
+    );
+    return {
+      completed: false,
+      idempotent: true,
+      updatedTransactionCount: 0
+    };
   }
   const t = new Date().toISOString();
   order.status = "PAID";
@@ -259,30 +286,32 @@ function completeOrder(order, channelTransactionNo) {
     description: `${order.productName}套餐赠送积分`,
     createdAt: t
   });
+  let updatedTransactionCount = 0;
   for (const transaction of store.transactions.values()) {
     if (transaction.orderNo === order.orderNo) {
       transaction.status = "SUCCESS";
       transaction.channelTransactionNo = channelTransactionNo;
       transaction.updatedAt = t;
+      updatedTransactionCount += 1;
     }
   }
-  billingLog.info("order.paid", "Order paid", {
+  billingLog.info("order.paid", markedMessage(logMeta, "Order paid"), markedFields(logMeta, {
     userId: order.userId,
     orderNo: order.orderNo,
     amountFen: order.amountFen,
     currency: order.currency,
     channelTransactionNo,
     paidAt: order.paidAt
-  });
-  subscriptionLog.info("subscription.activated", "Subscription activated", {
+  }));
+  subscriptionLog.info("subscription.activated", markedMessage(logMeta, "Subscription activated"), markedFields(logMeta, {
     userId: order.userId,
     orderNo: order.orderNo,
     planCode: plan.planCode,
     planName: plan.planName,
     priceCode: price.priceCode,
     expireAt
-  });
-  pointsLog.info("points.granted", "Points granted by paid order", {
+  }));
+  pointsLog.info("points.granted", markedMessage(logMeta, "Points granted by paid order"), markedFields(logMeta, {
     userId: order.userId,
     orderNo: order.orderNo,
     planCode: plan.planCode,
@@ -291,7 +320,12 @@ function completeOrder(order, channelTransactionNo) {
     balanceBefore,
     balanceAfter: account.availablePoints,
     ledgerId
-  });
+  }));
+  return {
+    completed: true,
+    idempotent: false,
+    updatedTransactionCount
+  };
 }
 
 function requireOrder(userId, orderNo) {
@@ -355,14 +389,28 @@ async function safeCreateChannelPayment(order, payType) {
 
 function verifyPaymentNotify(body, headers) {
   if (appConfig.payment.mockEnabled) {
+    paymentLog.debug("payment.notify_signature_skipped", paymentNotifyMessage("Payment notify signature skipped in mock mode"), paymentNotifyFields("WECHAT", {
+      payType: "WECHAT",
+      orderNo: body?.orderNo || null
+    }));
     return;
   }
   const signature = headers["x-daone-payment-signature"];
   if (!signature || !appConfig.payment.notifySecret) {
+    paymentLog.warn("payment.notify_signature_missing", paymentNotifyMessage("Payment notify signature or secret missing"), paymentNotifyFields("WECHAT", {
+      payType: "WECHAT",
+      orderNo: body?.orderNo || null,
+      hasSignature: Boolean(signature),
+      hasNotifySecret: Boolean(appConfig.payment.notifySecret)
+    }));
     throw forbidden();
   }
   const expected = paymentNotifySignature(body);
   if (!safeEqual(signature, expected)) {
+    paymentLog.warn("payment.notify_signature_mismatch", paymentNotifyMessage("Payment notify signature mismatch"), paymentNotifyFields("WECHAT", {
+      payType: "WECHAT",
+      orderNo: body?.orderNo || null
+    }));
     throw forbidden();
   }
 }
@@ -371,33 +419,63 @@ function parsePaymentNotify(payType, body, headers) {
   if (payType === "ALIPAY") {
     verifyAlipayNotify(body);
     if (!["TRADE_SUCCESS", "TRADE_FINISHED"].includes(body.trade_status)) {
+      paymentLog.warn("payment.notify_status_invalid", paymentNotifyMessage("Alipay notify status is not successful"), paymentNotifyFields(payType, {
+        payType,
+        orderNo: body.out_trade_no || null,
+        channelTransactionNo: body.trade_no || null,
+        paymentStatus: body.trade_status || null
+      }));
       throw conflict("PAYMENT_STATUS_INVALID", "支付状态未成功");
     }
     return {
       orderNo: body.out_trade_no,
       amountFen: yuanToFen(body.total_amount),
       currency: "CNY",
-      channelTransactionNo: body.trade_no
+      channelTransactionNo: body.trade_no,
+      paymentStatus: body.trade_status
     };
+  }
+  if (payType !== "WECHAT") {
+    throw badRequest("PAY_TYPE_UNSUPPORTED", "仅支持微信支付和支付宝支付");
   }
   verifyPaymentNotify(body, headers);
   return {
     orderNo: body.orderNo,
     amountFen: Number(body.amountFen),
     currency: body.currency,
-    channelTransactionNo: body.channelTransactionNo
+    channelTransactionNo: body.channelTransactionNo,
+    paymentStatus: body.status || body.tradeState || null
   };
 }
 
 function verifyAlipayNotify(body) {
   if (appConfig.payment.mockEnabled) {
+    paymentLog.debug("payment.notify_signature_skipped", paymentNotifyMessage("Payment notify signature skipped in mock mode"), paymentNotifyFields("ALIPAY", {
+      payType: "ALIPAY",
+      orderNo: body?.out_trade_no || null,
+      channelTransactionNo: body?.trade_no || null
+    }));
     return;
   }
   if (body.app_id !== appConfig.payment.alipay.appId) {
+    paymentLog.warn("payment.notify_app_mismatch", paymentNotifyMessage("Alipay notify app id mismatch"), paymentNotifyFields("ALIPAY", {
+      payType: "ALIPAY",
+      orderNo: body?.out_trade_no || null,
+      channelTransactionNo: body?.trade_no || null,
+      hasAppId: Boolean(body.app_id),
+      expectedAppConfigured: Boolean(appConfig.payment.alipay.appId)
+    }));
     throw forbidden();
   }
   const sign = body.sign;
   if (!sign || !appConfig.payment.alipay.publicKey) {
+    paymentLog.warn("payment.notify_signature_missing", paymentNotifyMessage("Alipay notify signature or public key missing"), paymentNotifyFields("ALIPAY", {
+      payType: "ALIPAY",
+      orderNo: body?.out_trade_no || null,
+      channelTransactionNo: body?.trade_no || null,
+      hasSignature: Boolean(sign),
+      hasPublicKey: Boolean(appConfig.payment.alipay.publicKey)
+    }));
     throw forbidden();
   }
   const signContent = Object.entries(body)
@@ -412,8 +490,69 @@ function verifyAlipayNotify(body) {
     Buffer.from(sign, "base64")
   );
   if (!verified) {
+    paymentLog.warn("payment.notify_signature_mismatch", paymentNotifyMessage("Alipay notify signature mismatch"), paymentNotifyFields("ALIPAY", {
+      payType: "ALIPAY",
+      orderNo: body?.out_trade_no || null,
+      channelTransactionNo: body?.trade_no || null
+    }));
     throw forbidden();
   }
+}
+
+function paymentNotifyFields(payType, fields = {}) {
+  return {
+    marker: PAYMENT_NOTIFY_MARKER,
+    notifySource: `${payType}_PAYMENT_CALLBACK`,
+    callbackImportant: true,
+    ...fields
+  };
+}
+
+function paymentNotifyMessage(message) {
+  return `${PAYMENT_NOTIFY_MARKER} ${message}`;
+}
+
+function markedFields(logMeta, fields) {
+  if (!logMeta?.marker) {
+    return fields;
+  }
+  return {
+    marker: logMeta.marker,
+    notifySource: logMeta.notifySource,
+    callbackImportant: logMeta.callbackImportant,
+    payType: logMeta.payType,
+    ...fields
+  };
+}
+
+function markedMessage(logMeta, message) {
+  return logMeta?.marker ? `${logMeta.marker} ${message}` : message;
+}
+
+function notifyOrderNo(payType, body) {
+  return payType === "ALIPAY" ? body?.out_trade_no || null : body?.orderNo || null;
+}
+
+function notifyChannelTransactionNo(payType, body) {
+  return payType === "ALIPAY" ? body?.trade_no || null : body?.channelTransactionNo || null;
+}
+
+function notifyPaymentStatus(payType, body) {
+  if (payType === "ALIPAY") return body?.trade_status || null;
+  return body?.status || body?.tradeState || null;
+}
+
+function notifyAmountFen(payType, body) {
+  if (payType === "ALIPAY") {
+    const amount = Number(body?.total_amount);
+    return Number.isFinite(amount) ? Math.round(amount * 100) : null;
+  }
+  const amount = Number(body?.amountFen);
+  return Number.isFinite(amount) ? amount : null;
+}
+
+function notifyCurrency(payType, body) {
+  return payType === "ALIPAY" ? "CNY" : body?.currency || null;
 }
 
 function yuanToFen(value) {

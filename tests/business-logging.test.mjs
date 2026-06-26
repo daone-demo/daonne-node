@@ -47,6 +47,113 @@ describe("business logging", () => {
     });
   });
 
+  it("logs WeChat payment notify success and idempotent repeat", async () => {
+    await withStoreSnapshot(async () => {
+      appConfig.profile = "local";
+      appConfig.payment.mockEnabled = true;
+      seedUser("log-wechat-notify-user", 30);
+      const order = billingService.createOrder("log-wechat-notify-user", "wechat-notify-order", {
+        orderType: "PLAN",
+        productCode: "TEAM_MONTH"
+      });
+      await billingService.createPayment("log-wechat-notify-user", order.orderNo, { payType: "WECHAT" });
+
+      const lines = await captureLogs(async () => {
+        await withLogContext({ traceId: "wechat-notify-trace" }, async () => {
+          billingService.notifyPayment("WECHAT", {
+            orderNo: order.orderNo,
+            amountFen: 69900,
+            currency: "CNY",
+            channelTransactionNo: "WX-LOG-001",
+            status: "SUCCESS"
+          });
+          billingService.notifyPayment("WECHAT", {
+            orderNo: order.orderNo,
+            amountFen: 69900,
+            currency: "CNY",
+            channelTransactionNo: "WX-LOG-001",
+            status: "SUCCESS"
+          });
+        });
+      });
+
+      const entries = parseEntries(lines);
+      const received = findEvent(entries, "payment.notify_received");
+      assert.equal(received.marker, "[PAYMENT_NOTIFY]");
+      assert.equal(received.notifySource, "WECHAT_PAYMENT_CALLBACK");
+      assert.equal(received.callbackImportant, true);
+      assert.match(received.message, /^\[PAYMENT_NOTIFY\]/);
+      assert.equal(received.payType, "WECHAT");
+      assert.equal(received.orderNo, order.orderNo);
+      assert.equal(received.channelTransactionNo, "WX-LOG-001");
+      assert.equal(received.paymentStatus, "SUCCESS");
+      assert.equal(received.amountFen, 69900);
+      assert.equal(received.currency, "CNY");
+
+      const verified = findEvent(entries, "payment.notify_verified");
+      assert.equal(verified.marker, "[PAYMENT_NOTIFY]");
+      assert.equal(verified.payType, "WECHAT");
+      assert.equal(verified.channelTransactionNo, "WX-LOG-001");
+
+      const processed = entries.filter((entry) => entry.event === "payment.notify_processed");
+      assert.equal(processed.length, 2);
+      assert.equal(processed[0].completed, true);
+      assert.equal(processed[0].idempotent, false);
+      assert.equal(processed[1].completed, false);
+      assert.equal(processed[1].idempotent, true);
+      assert.equal(processed[1].marker, "[PAYMENT_NOTIFY]");
+      const idempotentSkip = findEvent(entries, "order.complete_idempotent_skip");
+      assert.equal(idempotentSkip.marker, "[PAYMENT_NOTIFY]");
+      assert.match(idempotentSkip.message, /^\[PAYMENT_NOTIFY\]/);
+
+      assert.equal(findEvent(entries, "order.paid").marker, "[PAYMENT_NOTIFY]");
+      assert.equal(findEvent(entries, "subscription.activated").marker, "[PAYMENT_NOTIFY]");
+      assert.equal(findEvent(entries, "points.granted").marker, "[PAYMENT_NOTIFY]");
+    });
+  });
+
+  it("logs Alipay payment notify rejected by unsuccessful status", async () => {
+    await withStoreSnapshot(async () => {
+      appConfig.payment.mockEnabled = true;
+
+      const lines = await captureLogs(async () => {
+        assert.throws(
+          () => billingService.notifyPayment("ALIPAY", {
+            out_trade_no: "DN-ALIPAY-LOG-001",
+            total_amount: "699.00",
+            trade_no: "ALI-LOG-001",
+            trade_status: "WAIT_BUYER_PAY"
+          }),
+          (error) => error.code === "PAYMENT_STATUS_INVALID"
+        );
+      });
+
+      const entries = parseEntries(lines);
+      const received = findEvent(entries, "payment.notify_received");
+      assert.equal(received.marker, "[PAYMENT_NOTIFY]");
+      assert.equal(received.notifySource, "ALIPAY_PAYMENT_CALLBACK");
+      assert.match(received.message, /^\[PAYMENT_NOTIFY\]/);
+      assert.equal(received.payType, "ALIPAY");
+      assert.equal(received.orderNo, "DN-ALIPAY-LOG-001");
+      assert.equal(received.channelTransactionNo, "ALI-LOG-001");
+      assert.equal(received.paymentStatus, "WAIT_BUYER_PAY");
+      assert.equal(received.amountFen, 69900);
+      assert.equal(received.currency, "CNY");
+
+      const invalidStatus = findEvent(entries, "payment.notify_status_invalid");
+      assert.equal(invalidStatus.level, "warn");
+      assert.equal(invalidStatus.marker, "[PAYMENT_NOTIFY]");
+      assert.equal(invalidStatus.payType, "ALIPAY");
+      assert.equal(invalidStatus.paymentStatus, "WAIT_BUYER_PAY");
+
+      const rejected = findEvent(entries, "payment.notify_rejected");
+      assert.equal(rejected.level, "warn");
+      assert.equal(rejected.marker, "[PAYMENT_NOTIFY]");
+      assert.equal(rejected.errorCode, "PAYMENT_STATUS_INVALID");
+      assert.equal(rejected.errorStatus, 409);
+    });
+  });
+
   it("logs AI point consumption", async () => {
     await withStoreSnapshot(async () => {
       appConfig.model.mockEnabled = true;
