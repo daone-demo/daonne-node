@@ -6,85 +6,120 @@ import { badGateway, badRequest, forbidden, notFound } from "../common/errors.js
 import { requireProject } from "./projectService.js";
 import { reviewAsset } from "../../infrastructure/middleware/contentSafetyClient.js";
 
-const MIB = 1024 * 1024;
-const UPLOAD_SIZE_LIMITS = {
-  IMAGE: 10 * MIB,
-  VIDEO: 50 * MIB
-};
-
-export function createUploadTicket(userId, body) {
-  if (!body.fileName || !body.contentType || !body.fileSize) {
+export async function createUploadTicket(userId, body) {
+  const upload = normalizeUploadBody(body);
+  if (!upload.fileName || !upload.contentType || !upload.fileSize) {
     throw badRequest("PARAM_INVALID", "fileName、contentType、fileSize 不能为空");
   }
-  const type = mediaType(body.contentType);
-  const fileSize = validateFileSize(body.fileSize, type);
-  if (body.projectId) {
-    requireProject(userId, body.projectId);
+  const type = mediaType(upload.contentType);
+  if (upload.projectId) {
+    requireProject(userId, upload.projectId);
   }
-  const extension = body.fileName.includes(".") ? body.fileName.slice(body.fileName.lastIndexOf(".")) : "";
-  const objectKey = `user/${userId}/${crypto.randomUUID()}${extension}`;
-  const uploadTicket = `upt_${crypto.randomUUID().replaceAll("-", "")}`;
-  const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
-  store.uploadTickets.set(uploadTicket, {
-    userId,
-    projectId: body.projectId ? String(body.projectId) : null,
-    fileName: body.fileName,
-    contentType: body.contentType,
-    fileSize,
+  const extension = upload.fileName.includes(".") ? upload.fileName.slice(upload.fileName.lastIndexOf(".")) : "";
+  const objectKey = `${type.toLowerCase()}/${userId}/${crypto.randomUUID()}${extension}`;
+  return createUploadedAsset(userId, {
+    projectId: upload.projectId,
+    fileName: upload.fileName,
+    contentType: upload.contentType,
+    fileSize: upload.fileSize,
+    content: upload.content,
     type,
-    objectKey,
-    expiresAt
+    objectKey
   });
-  const uploadTarget = createUploadTarget(objectKey, body.contentType, expiresAt);
-  return {
-    uploadTicket,
-    uploadMethod: uploadTarget.uploadMethod,
-    uploadUrl: uploadTarget.uploadUrl,
-    objectKey,
-    formFields: uploadTarget.formFields,
-    expiresAt
-  };
 }
 
 export async function completeUpload(userId, body) {
-  const ticket = store.uploadTickets.get(body.uploadTicket);
-  if (!ticket || ticket.userId !== userId) {
-    throw badRequest("UPLOAD_TICKET_INVALID", "上传凭证无效");
-  }
-  if (Number(body.fileSize) !== ticket.fileSize) {
-    throw badRequest("FILE_SIZE_MISMATCH", "上传文件大小与申请凭证时不一致");
-  }
-  if (body.projectId) {
-    requireProject(userId, body.projectId);
-  }
-  if (ticket.projectId && body.projectId && ticket.projectId !== String(body.projectId)) {
-    throw badRequest("UPLOAD_TICKET_INVALID", "上传凭证与项目不匹配");
-  }
+  return createUploadTicket(userId, body);
+}
+
+async function createUploadedAsset(userId, upload) {
+  await uploadObjectToStorage(upload);
   const id = nextId();
   const t = new Date().toISOString();
   const asset = {
     id,
     userId,
-    projectId: body.projectId ? String(body.projectId) : ticket.projectId,
-    type: ticket.type,
+    projectId: upload.projectId ? String(upload.projectId) : null,
+    type: upload.type,
     source: "UPLOAD",
-    fileName: ticket.fileName,
-    objectKey: ticket.objectKey,
-    contentType: ticket.contentType,
-    fileSize: ticket.fileSize,
+    fileName: upload.fileName,
+    objectKey: upload.objectKey,
+    contentType: upload.contentType,
+    fileSize: Number(upload.fileSize),
     width: null,
     height: null,
     durationSeconds: null,
     reviewStatus: "REVIEWING",
-    previewUrl: publicObjectUrl(ticket.objectKey),
+    previewUrl: publicObjectUrl(upload.objectKey),
     createdAt: t,
     updatedAt: t
   };
   const review = await safeReviewAsset(asset);
   asset.reviewStatus = review.status;
   store.assets.set(id, asset);
-  store.uploadTickets.delete(body.uploadTicket);
-  return toAssetView(asset, userId);
+  const view = toAssetView(asset, userId);
+  return {
+    ...view,
+    url: asset.previewUrl,
+    objectKey: asset.objectKey
+  };
+}
+
+function normalizeUploadBody(body) {
+  const file = body.file || body.asset || body.uploadFile || null;
+  const content = uploadContent(body, file);
+  const fileSize = body.fileSize !== undefined && body.fileSize !== null && body.fileSize !== ""
+    ? Number(body.fileSize)
+    : file?.fileSize || content?.length;
+  if (content && fileSize !== content.length) {
+    throw badRequest("FILE_SIZE_MISMATCH", "上传文件大小与文件内容不一致");
+  }
+  return {
+    projectId: body.projectId,
+    fileName: body.fileName || file?.fileName,
+    contentType: body.contentType || file?.contentType,
+    fileSize,
+    content
+  };
+}
+
+function uploadContent(body, file) {
+  if (Buffer.isBuffer(file?.content)) return file.content;
+  if (typeof body.fileBase64 === "string") return Buffer.from(stripDataUrlPrefix(body.fileBase64), "base64");
+  if (typeof body.fileContent === "string") return Buffer.from(stripDataUrlPrefix(body.fileContent), "base64");
+  return null;
+}
+
+function stripDataUrlPrefix(value) {
+  return value.includes(",") ? value.slice(value.indexOf(",") + 1) : value;
+}
+
+async function uploadObjectToStorage(upload) {
+  if (appConfig.storage.mockEnabled) {
+    if (!isLocalRuntime()) {
+      throw badGateway("STORAGE_MOCK_NOT_ALLOWED", "Storage mock 仅允许本地环境使用");
+    }
+    return;
+  }
+  if (!upload.content) {
+    throw badRequest("FILE_REQUIRED", "请上传文件内容");
+  }
+  const response = await fetch(ossUploadObjectUrl(upload.objectKey), {
+    method: "PUT",
+    headers: ossPutObjectHeaders(upload),
+    body: upload.content
+  });
+  if (!response.ok) {
+    const responseBody = await response.text().catch(() => "");
+    throw badGateway("OSS_UPLOAD_ERROR", "OSS 文件上传失败", {
+      status: response.status,
+      reason: responseBody.slice(0, 500)
+    });
+  }
+}
+
+function isLocalRuntime() {
+  return appConfig.profile === "local" && !process.env.VERCEL && !process.env.VERCEL_ENV;
 }
 
 export function listAssets(userId, query) {
@@ -168,39 +203,12 @@ function mediaType(contentType) {
   throw badRequest("FILE_TYPE_NOT_SUPPORTED", "仅支持图片和视频");
 }
 
-function validateFileSize(value, type) {
-  const fileSize = Number(value);
-  if (!Number.isFinite(fileSize) || fileSize <= 0) {
-    throw badRequest("PARAM_INVALID", "fileSize 必须为大于 0 的数字");
-  }
-  const maxSize = UPLOAD_SIZE_LIMITS[type];
-  if (fileSize > maxSize) {
-    throw badRequest("FILE_SIZE_TOO_LARGE", `${type === "IMAGE" ? "图片" : "视频"}文件大小不能超过 ${maxSize / MIB}M`);
-  }
-  return fileSize;
-}
-
 async function safeReviewAsset(asset) {
   try {
     return await reviewAsset(asset);
   } catch (error) {
     throw badGateway("CONTENT_SAFETY_ERROR", "内容安全服务异常", { reason: error.message });
   }
-}
-
-function createUploadTarget(objectKey, contentType, expiresAt) {
-  if (appConfig.storage.mockEnabled) {
-    return {
-      uploadMethod: "POST",
-      uploadUrl: "/api/mock-files/upload",
-      formFields: { key: objectKey }
-    };
-  }
-  return {
-    uploadMethod: "PUT",
-    uploadUrl: signedOssPutUrl(objectKey, contentType, expiresAt),
-    formFields: { "Content-Type": contentType }
-  };
 }
 
 function publicObjectUrl(objectKey) {
@@ -219,20 +227,29 @@ function ossObjectUrl(objectKey) {
   return `https://${bucket}.${endpoint}/${encodeObjectKey(objectKey)}`;
 }
 
-function signedOssPutUrl(objectKey, contentType, expiresAt) {
-  const expires = Math.floor(new Date(expiresAt).getTime() / 1000);
-  const resource = `/${appConfig.storage.oss.bucket}/${objectKey}`;
-  const stringToSign = ["PUT", "", contentType, expires, resource].join("\n");
+function ossUploadObjectUrl(objectKey) {
+  const endpoint = appConfig.storage.oss.endpoint.replace(/^https?:\/\//, "").replace(/\/$/, "");
+  const bucket = appConfig.storage.oss.bucket;
+  if (!endpoint || !bucket || !appConfig.aliyun.accessKeyId || !appConfig.aliyun.accessKeySecret) {
+    throw badGateway("OSS_CONFIG_MISSING", "OSS 配置不完整");
+  }
+  return `https://${bucket}.${endpoint}/${encodeObjectKey(objectKey)}`;
+}
+
+function ossPutObjectHeaders(upload) {
+  const date = new Date().toUTCString();
+  const resource = `/${appConfig.storage.oss.bucket}/${upload.objectKey}`;
+  const stringToSign = ["PUT", "", upload.contentType, date, resource].join("\n");
   const signature = crypto
     .createHmac("sha1", appConfig.aliyun.accessKeySecret)
     .update(stringToSign)
     .digest("base64");
-  const params = new URLSearchParams({
-    OSSAccessKeyId: appConfig.aliyun.accessKeyId,
-    Expires: String(expires),
-    Signature: signature
-  });
-  return `${ossObjectUrl(objectKey)}?${params.toString()}`;
+  return {
+    Date: date,
+    "Content-Type": upload.contentType,
+    "Content-Length": String(upload.content.length),
+    Authorization: `OSS ${appConfig.aliyun.accessKeyId}:${signature}`
+  };
 }
 
 function joinUrl(baseUrl, objectKey) {

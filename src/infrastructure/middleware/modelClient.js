@@ -280,18 +280,49 @@ export async function createChatCompletionStream(body = {}) {
 }
 
 export function supportedChatModels() {
-  const defaultModel = resolveProviderModel("CHAT", appConfig.model.defaultChatModel, { allowPassthrough: true, ignoreStatus: true });
-  const defaultProviderModel = defaultModel ? providerModelName(defaultModel) : appConfig.model.defaultChatModel;
-  return providerModels("CHAT", { enabledOnly: true }).map((item) => ({
+  return supportedProviderModels("CHAT");
+}
+
+export function supportedProviderModels(type = "CHAT") {
+  const gateway = normalizeProviderModelType(type);
+  const defaultProviderModel = defaultProviderModelName(gateway);
+  return providerModels(gateway, { enabledOnly: true }).map((item) => ({
     code: item.modelCode,
     model: providerModelName(item),
     name: item.modelName,
+    type: providerModelTypeName(gateway),
+    gateway,
     provider: item.attributes?.provider || null,
     description: item.attributes?.description || "",
     supportsStreaming: item.attributes?.supportsStreaming !== false,
     default: providerModelName(item) === defaultProviderModel,
     attributes: item.attributes || {}
   }));
+}
+
+function normalizeProviderModelType(type) {
+  const value = String(type || "CHAT").trim().toUpperCase().replace(/[-\s]/g, "_");
+  if (["CHAT", "MULTIMODAL_CHAT", "MULTIMODAL", "DIALOG", "CONVERSATION"].includes(value)) return "CHAT";
+  if (["IMAGE", "IMAGE_GENERATION", "IMAGES", "PICTURE"].includes(value)) return "IMAGE";
+  if (["VIDEO", "VIDEO_GENERATION", "VIDEOS"].includes(value)) return "VIDEO";
+  throw badRequest("PROVIDER_MODEL_TYPE_NOT_SUPPORTED", "模型类型不支持");
+}
+
+function providerModelTypeName(gateway) {
+  if (gateway === "IMAGE") return "IMAGE_GENERATION";
+  if (gateway === "VIDEO") return "VIDEO_GENERATION";
+  return "MULTIMODAL_CHAT";
+}
+
+function defaultProviderModelName(gateway) {
+  const defaultModelByGateway = {
+    CHAT: appConfig.model.defaultChatModel,
+    IMAGE: appConfig.model.defaultImageModel,
+    VIDEO: "seedance2.0"
+  };
+  const configured = defaultModelByGateway[gateway];
+  const defaultModel = resolveProviderModel(gateway, configured, { allowPassthrough: true, ignoreStatus: true });
+  return defaultModel ? providerModelName(defaultModel) : configured;
 }
 
 export async function createImageGeneration(body = {}) {

@@ -1,6 +1,6 @@
 import { Router } from "../service/common/router.js";
 import { appConfig, configHealth } from "../infrastructure/config/env.js";
-import { readJson, parsePage, paginate } from "../service/common/http.js";
+import { readBody, parsePage, paginate } from "../service/common/http.js";
 import { pageResponse, sendError, sendJson, sendNoContent, success, traceId } from "../service/common/response.js";
 import { forbidden, notFound, unauthorized } from "../service/common/errors.js";
 import * as auth from "../service/auth/authService.js";
@@ -91,7 +91,9 @@ router.post("/api/v1/generation-tasks", async ({ user, body, req }) => aiService
 router.get("/api/v1/generation-tasks", async ({ user, url }) => page(aiService.listTasks(user.id, Object.fromEntries(url.searchParams)), url));
 router.get("/api/v1/generation-tasks/:taskId", async ({ user, params }) => aiService.getTask(user.id, params.taskId));
 router.post("/api/v1/generation-tasks/:taskId/cancel", async ({ user, params }) => aiService.cancelTask(user.id, params.taskId));
-router.get("/api/v1/provider/chat/models", async () => ({ items: modelClient.supportedChatModels() }));
+router.get("/api/v1/provider/chat/models", async ({ url }) => ({
+  items: modelClient.supportedProviderModels(url.searchParams.get("type") || url.searchParams.get("modelType") || url.searchParams.get("gateway"))
+}));
 router.post("/api/v1/provider/chat/completions", async ({ body }) => {
   if (body.stream) {
     return providerStream(await modelClient.createChatCompletionStream(body));
@@ -143,7 +145,7 @@ router.post("/api/v1/orders/:orderNo/mock-paid", async ({ user, params }) => {
   billingService.completeLocalPayment(user.id, params.orderNo);
   return null;
 });
-router.post("/api/v1/payments/:payType/notify", async ({ params, body, req }) => billingService.notifyPayment(params.payType.toUpperCase(), body, req.headers), { public: true, rawSuccess: true });
+router.post("/api/v1/payments/:payType/notify", async ({ params, body, req }) => rawText(billingService.notifyPayment(params.payType.toUpperCase(), body, req.headers)), { public: true });
 router.post("/api/v1/subscriptions/cancel-auto-renew", async ({ user }) => {
   billingService.cancelAutoRenew(user.id);
   return null;
@@ -244,7 +246,7 @@ export async function handleRequest(req, res) {
     if (matched.options.admin && !hasRole(user.role, "ADMIN")) {
       throw forbidden();
     }
-    const body = ["POST", "PUT", "PATCH"].includes(req.method) ? await readJson(req) : {};
+    const body = ["POST", "PUT", "PATCH"].includes(req.method) ? await readBody(req) : {};
     const result = await matched.handler({ req, url, params: matched.params, body, user, token });
     if (["POST", "PUT", "PATCH", "DELETE"].includes(req.method)) {
       await persistRuntimeStore();
@@ -265,6 +267,10 @@ export async function handleRequest(req, res) {
     }
     if (result?.__rawJson) {
       sendRawJson(res, 200, result.data, trace);
+      return;
+    }
+    if (result?.__rawText) {
+      sendRawText(res, 200, result.text, trace);
       return;
     }
     if (matched.options.rawSuccess) {
@@ -321,11 +327,22 @@ function rawJson(data) {
   return { __rawJson: true, data };
 }
 
+function rawText(text) {
+  return { __rawText: true, text };
+}
+
 function sendRawJson(res, status, payload, trace) {
   res.statusCode = status;
   res.setHeader("content-type", "application/json; charset=utf-8");
   res.setHeader("x-trace-id", trace);
   res.end(JSON.stringify(payload));
+}
+
+function sendRawText(res, status, text, trace) {
+  res.statusCode = status;
+  res.setHeader("content-type", "text/plain; charset=utf-8");
+  res.setHeader("x-trace-id", trace);
+  res.end(String(text ?? ""));
 }
 
 async function sendProviderStream(res, response, trace) {

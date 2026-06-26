@@ -59,6 +59,79 @@ describe("Daone Vercel Node API", () => {
     }
   });
 
+  it("uploads assets to OSS when storage mock is disabled", async () => {
+    const { createUploadTicket } = await import("../src/service/creation/assetService.js");
+    const originalFetch = globalThis.fetch;
+    const originalStorageMock = appConfig.storage.mockEnabled;
+    const originalPublicBaseUrl = appConfig.storage.publicBaseUrl;
+    const originalOss = { ...appConfig.storage.oss };
+    const originalAliyun = { ...appConfig.aliyun };
+    const originalContentSafetyMock = appConfig.contentSafety.mockEnabled;
+    const uploaded = Buffer.from("real oss payload");
+    let putObjectCalled = false;
+    try {
+      appConfig.storage.mockEnabled = false;
+      appConfig.storage.publicBaseUrl = "https://cdn.example.com";
+      appConfig.storage.oss.endpoint = "oss-cn-shanghai.aliyuncs.com";
+      appConfig.storage.oss.bucket = "daone-test";
+      appConfig.aliyun.accessKeyId = "ak-test";
+      appConfig.aliyun.accessKeySecret = "sk-test";
+      appConfig.contentSafety.mockEnabled = true;
+      globalThis.fetch = async (url, options) => {
+        putObjectCalled = true;
+        assert.equal(options.method, "PUT");
+        assert.match(url, /^https:\/\/daone-test\.oss-cn-shanghai\.aliyuncs\.com\/image\/oss-user\/[0-9a-f-]{36}\.png$/);
+        assert.equal(options.headers["Content-Type"], "image/png");
+        assert.equal(options.headers["Content-Length"], String(uploaded.length));
+        assert.match(options.headers.Authorization, /^OSS ak-test:/);
+        assert.equal(Buffer.compare(options.body, uploaded), 0);
+        return new Response("", { status: 200 });
+      };
+      const asset = await createUploadTicket("oss-user", {
+        fileName: "photo.png",
+        contentType: "image/png",
+        fileContent: uploaded.toString("base64")
+      });
+      assert.equal(putObjectCalled, true);
+      assert.match(asset.objectKey, /^image\/oss-user\/[0-9a-f-]{36}\.png$/);
+      assert.equal(asset.url, `https://cdn.example.com/${asset.objectKey}`);
+      assert.equal(asset.source, "UPLOAD");
+      assert.equal(asset.status, "AVAILABLE");
+    } finally {
+      globalThis.fetch = originalFetch;
+      appConfig.storage.mockEnabled = originalStorageMock;
+      appConfig.storage.publicBaseUrl = originalPublicBaseUrl;
+      appConfig.storage.oss = originalOss;
+      appConfig.aliyun.accessKeyId = originalAliyun.accessKeyId;
+      appConfig.aliyun.accessKeySecret = originalAliyun.accessKeySecret;
+      appConfig.contentSafety.mockEnabled = originalContentSafetyMock;
+    }
+  });
+
+  it("does not allow storage mock outside local runtime", async () => {
+    const { createUploadTicket } = await import("../src/service/creation/assetService.js");
+    const originalVercel = process.env.VERCEL;
+    const originalProfile = appConfig.profile;
+    const originalStorageMock = appConfig.storage.mockEnabled;
+    try {
+      process.env.VERCEL = "1";
+      appConfig.profile = "test";
+      appConfig.storage.mockEnabled = true;
+      await assert.rejects(
+        () => createUploadTicket("mock-user", {
+          fileName: "photo.png",
+          contentType: "image/png",
+          fileContent: Buffer.from("mock payload").toString("base64")
+        }),
+        (error) => error.code === "STORAGE_MOCK_NOT_ALLOWED"
+      );
+    } finally {
+      restoreEnv("VERCEL", originalVercel);
+      appConfig.profile = originalProfile;
+      appConfig.storage.mockEnabled = originalStorageMock;
+    }
+  });
+
   it("supports core frontend flow", async () => {
     let response = await request("POST", "/api/v1/auth/sms-codes", {
       phone: "13800138000",
@@ -268,15 +341,17 @@ describe("Daone Vercel Node API", () => {
     assert.equal(response.status, 200);
     assert.equal(response.body.data.project.id, projectId);
 
-    response = await request("POST", "/api/v1/assets/upload-tickets", {
+    response = await requestMultipart("POST", "/api/v1/assets/upload-tickets", {
       projectId,
-      fileName: "cover.png",
-      contentType: "image/png",
-      fileSize: 128
+      file: {
+        fileName: "cover.png",
+        contentType: "image/png",
+        content: Buffer.from("mock image")
+      }
     }, token);
     assert.equal(response.status, 200);
-    assert.equal(response.body.data.uploadUrl, "/api/mock-files/upload");
-    const uploadTicket = response.body.data.uploadTicket;
+    assert.equal(response.body.data.source, "UPLOAD");
+    assert.match(response.body.data.url, /\/api\/mock-files\/image\/\d+\//);
     const objectKey = response.body.data.objectKey;
 
     response = await request("POST", "/api/v1/assets/upload-tickets", {
@@ -316,14 +391,6 @@ describe("Daone Vercel Node API", () => {
     response = await request("GET", `/api/mock-files/${objectKey}`);
     assert.equal(response.status, 200);
     assert.match(response.rawBody, /Daone Mock File/);
-
-    response = await request("POST", "/api/v1/assets", {
-      uploadTicket,
-      projectId,
-      fileSize: 128
-    }, token);
-    assert.equal(response.status, 200);
-    assert.equal(response.body.data.source, "UPLOAD");
 
     response = await request("GET", "/api/v1/ai/capabilities", null, token);
     assert.equal(response.status, 200);
@@ -382,7 +449,26 @@ describe("Daone Vercel Node API", () => {
     assert.equal(response.body.code, "OK");
     assert.ok(response.body.data.items.some((item) => item.code === "gpt5.5" && item.model === "gpt-5.5"));
     assert.ok(response.body.data.items.some((item) => item.code === "gemini-3-1-pro-preview" && item.model === "gemini-3.1-pro-preview"));
+    assert.ok(response.body.data.items.every((item) => item.type === "MULTIMODAL_CHAT" && item.gateway === "CHAT"));
     assert.ok(response.body.data.items.every((item) => item.supportsStreaming === true));
+
+    response = await request("GET", "/api/v1/provider/chat/models?type=image", null, token);
+    assert.equal(response.status, 200);
+    assert.ok(response.body.data.items.some((item) => item.code === "image2.0" && item.model === "gpt-image-2"));
+    assert.ok(response.body.data.items.some((item) => item.code === "nanobanana-2.0" && item.model === "gemini-3.1-flash-image-preview"));
+    assert.ok(response.body.data.items.every((item) => item.type === "IMAGE_GENERATION" && item.gateway === "IMAGE"));
+    assert.ok(!response.body.data.items.some((item) => item.code === "gpt5.5"));
+
+    response = await request("GET", "/api/v1/provider/chat/models?type=video", null, token);
+    assert.equal(response.status, 200);
+    assert.ok(response.body.data.items.some((item) => item.code === "seedance2.0" && item.model === "seedance2.0"));
+    assert.ok(response.body.data.items.some((item) => item.code === "happy-horse" && item.model === "happy-horse"));
+    assert.ok(response.body.data.items.every((item) => item.type === "VIDEO_GENERATION" && item.gateway === "VIDEO"));
+    assert.ok(!response.body.data.items.some((item) => item.code === "image2.0"));
+
+    response = await request("GET", "/api/v1/provider/chat/models?type=audio", null, token);
+    assert.equal(response.status, 400);
+    assert.equal(response.body.code, "PROVIDER_MODEL_TYPE_NOT_SUPPORTED");
 
     response = await request("POST", "/api/v1/provider/chat/completions", {
       model: "gemini-3-1-pro-preview",
@@ -545,7 +631,7 @@ describe("Daone Vercel Node API", () => {
 
     const originalStorageMock = appConfig.storage.mockEnabled;
     appConfig.storage.mockEnabled = false;
-    response = await request("GET", "/api/mock-files/user/test.png");
+    response = await request("GET", "/api/mock-files/image/test.png");
     assert.equal(response.status, 404);
     response = await request("POST", "/api/mock-files/upload", {});
     assert.equal(response.status, 404);
@@ -749,7 +835,7 @@ describe("Daone Vercel Node API", () => {
 
     response = await request("GET", "/api/doc.html");
     assert.equal(response.status, 200);
-    assert.match(response.rawBody, /SwaggerUIBundle/);
+    assert.match(response.rawBody, /data-ui="knife4j"/);
     assert.match(response.rawBody, /\/api\/v3\/swagger/);
   });
 
@@ -845,21 +931,12 @@ describe("Daone Vercel Node API", () => {
     assert.equal(response.body.data.canvasData.meta.projectName, "新名称");
   });
 
-  it("creates signed Alipay precreate payments with qr code content", async () => {
+  it("creates signed Alipay page payments with redirect url", async () => {
     const { privateKey, publicKey } = crypto.generateKeyPairSync("rsa", {
       modulusLength: 2048,
       privateKeyEncoding: { type: "pkcs8", format: "pem" },
       publicKeyEncoding: { type: "spki", format: "pem" }
     });
-    const responseContent = JSON.stringify({
-      code: "10000",
-      msg: "Success",
-      out_trade_no: "DNTEST",
-      qr_code: "https://qr.alipay.com/test"
-    });
-    const sign = crypto.sign("RSA-SHA256", Buffer.from(responseContent), privateKey).toString("base64");
-    const responseText = `{"alipay_trade_precreate_response":${responseContent},"sign":"${sign}"}`;
-    const originalFetch = globalThis.fetch;
     const originalProfile = appConfig.profile;
     const originalPaymentMock = appConfig.payment.mockEnabled;
     const originalAlipay = { ...appConfig.payment.alipay };
@@ -870,30 +947,103 @@ describe("Daone Vercel Node API", () => {
       appConfig.payment.alipay.privateKey = privateKey;
       appConfig.payment.alipay.publicKey = publicKey;
       appConfig.payment.alipay.notifyUrl = "https://www.daoneai.com/api/v1/payments/ALIPAY/notify";
-      globalThis.fetch = async (url, options) => {
-        assert.equal(url, "https://openapi.alipay.com/gateway.do");
-        assert.equal(options.method, "POST");
-        assert.match(options.body, /method=alipay\.trade\.precreate/);
-        assert.match(options.body, /sign=/);
-        return new Response(responseText, {
-          status: 200,
-          headers: { "content-type": "application/json" }
-        });
-      };
       const payment = await createChannelPayment({
         orderNo: "DNTEST",
         productName: "测试套餐",
         amountFen: 9900,
         currency: "CNY"
       }, "ALIPAY");
-      assert.deepEqual(payment, {
-        payType: "ALIPAY",
-        qrCodeContent: "https://qr.alipay.com/test",
-        redirectUrl: null
-      });
+      assert.equal(payment.payType, "ALIPAY");
+      assert.match(payment.redirectUrl, /^https:\/\/openapi\.alipay\.com\/gateway\.do\?/);
+      assert.match(payment.qrCodeContent, /^data:image\/png;base64,/);
+      assert.deepEqual(pngDimensions(payment.qrCodeContent), { width: 512, height: 512 });
+      const url = new URL(payment.redirectUrl);
+      assert.equal(url.searchParams.get("method"), "alipay.trade.page.pay");
+      assert.equal(url.searchParams.get("app_id"), "2021000000000000");
+      const bizContent = JSON.parse(url.searchParams.get("biz_content"));
+      assert.equal(bizContent.out_trade_no, "DNTEST");
+      assert.equal(bizContent.total_amount, "99.00");
+      assert.equal(bizContent.subject, "测试套餐");
+      assert.equal(bizContent.product_code, "FAST_INSTANT_TRADE_PAY");
+      const sign = url.searchParams.get("sign");
+      url.searchParams.delete("sign");
+      const signContent = [...url.searchParams.entries()]
+        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+        .map(([key, value]) => `${key}=${value}`)
+        .join("&");
+      assert.equal(crypto.verify("RSA-SHA256", Buffer.from(signContent), publicKey, Buffer.from(sign, "base64")), true);
     } finally {
-      globalThis.fetch = originalFetch;
       appConfig.profile = originalProfile;
+      appConfig.payment.mockEnabled = originalPaymentMock;
+      appConfig.payment.alipay = originalAlipay;
+    }
+  });
+
+  it("accepts signed Alipay page payment notifications", async () => {
+    const { privateKey, publicKey } = crypto.generateKeyPairSync("rsa", {
+      modulusLength: 2048,
+      privateKeyEncoding: { type: "pkcs8", format: "pem" },
+      publicKeyEncoding: { type: "spki", format: "pem" }
+    });
+    const originalPaymentMock = appConfig.payment.mockEnabled;
+    const originalAlipay = { ...appConfig.payment.alipay };
+    try {
+      appConfig.payment.mockEnabled = false;
+      appConfig.payment.alipay.appId = "2021000000000000";
+      appConfig.payment.alipay.privateKey = privateKey;
+      appConfig.payment.alipay.publicKey = publicKey;
+      appConfig.payment.alipay.notifyUrl = "https://www.daoneai.com/api/v1/payments/ALIPAY/notify";
+
+      let response = await request("POST", "/api/v1/auth/sms-codes", {
+        phone: "13800138006",
+        scene: "LOGIN"
+      });
+      assert.equal(response.status, 200);
+
+      response = await request("POST", "/api/v1/auth/sms-login", {
+        phone: "13800138006",
+        code: "123456"
+      });
+      assert.equal(response.status, 200);
+      const token = response.body.data.token;
+
+      response = await request("POST", "/api/v1/orders", {
+        orderType: "PLAN",
+        productCode: "TEAM_MONTH"
+      }, token, { "Idempotency-Key": "alipay-order-1" });
+      assert.equal(response.status, 200);
+      const orderNo = response.body.data.orderNo;
+
+      response = await request("POST", `/api/v1/orders/${orderNo}/payments`, {
+        payType: "ALIPAY"
+      }, token);
+      assert.equal(response.status, 200);
+      assert.ok(response.body.data.redirectUrl);
+      assert.match(response.body.data.qrCodeContent, /^data:image\/png;base64,/);
+
+      response = await request("POST", `/api/v1/orders/${orderNo}/payments`, {
+        payType: "ALIPAY"
+      }, token);
+      assert.equal(response.status, 200);
+      assert.match(response.body.data.qrCodeContent, /^data:image\/png;base64,/);
+
+      const notifyBody = signedAlipayNotify({
+        app_id: "2021000000000000",
+        trade_no: "2026062622000000000001",
+        out_trade_no: orderNo,
+        trade_status: "TRADE_SUCCESS",
+        total_amount: "699.00",
+        seller_id: "2088000000000000",
+        timestamp: "2026-06-26 12:00:00"
+      }, privateKey);
+      response = await requestForm("POST", "/api/v1/payments/ALIPAY/notify", notifyBody);
+      assert.equal(response.status, 200);
+      assert.equal(response.rawBody, "success");
+
+      response = await request("GET", `/api/v1/orders/${orderNo}`, null, token);
+      assert.equal(response.status, 200);
+      assert.equal(response.body.data.status, "PAID");
+    } finally {
       appConfig.payment.mockEnabled = originalPaymentMock;
       appConfig.payment.alipay = originalAlipay;
     }
@@ -902,6 +1052,30 @@ describe("Daone Vercel Node API", () => {
 
 async function request(method, path, body = null, token = null, extraHeaders = {}) {
   const req = makeReq(method, path, body, token, extraHeaders);
+  const res = makeRes();
+  await handleRequest(req, res);
+  return {
+    status: res.statusCode,
+    body: parseJson(res.body),
+    rawBody: res.body,
+    headers: res.headers
+  };
+}
+
+async function requestMultipart(method, path, body, token = null) {
+  const req = makeMultipartReq(method, path, body, token);
+  const res = makeRes();
+  await handleRequest(req, res);
+  return {
+    status: res.statusCode,
+    body: parseJson(res.body),
+    rawBody: res.body,
+    headers: res.headers
+  };
+}
+
+async function requestForm(method, path, body, token = null) {
+  const req = makeFormReq(method, path, body, token);
   const res = makeRes();
   await handleRequest(req, res);
   return {
@@ -924,6 +1098,41 @@ async function requestViaVercelIndex(method, path, body = null, token = null, ex
   };
 }
 
+function makeMultipartReq(method, path, body, token) {
+  const boundary = `----daone-test-${crypto.randomUUID()}`;
+  const chunks = [];
+  for (const [name, value] of Object.entries(body)) {
+    if (value && Buffer.isBuffer(value.content)) {
+      chunks.push(Buffer.from(`--${boundary}\r\n`));
+      chunks.push(Buffer.from(`Content-Disposition: form-data; name="${name}"; filename="${value.fileName}"\r\n`));
+      chunks.push(Buffer.from(`Content-Type: ${value.contentType}\r\n\r\n`));
+      chunks.push(value.content);
+      chunks.push(Buffer.from("\r\n"));
+    } else {
+      chunks.push(Buffer.from(`--${boundary}\r\n`));
+      chunks.push(Buffer.from(`Content-Disposition: form-data; name="${name}"\r\n\r\n`));
+      chunks.push(Buffer.from(String(value)));
+      chunks.push(Buffer.from("\r\n"));
+    }
+  }
+  chunks.push(Buffer.from(`--${boundary}--\r\n`));
+  const payload = Buffer.concat(chunks);
+  const headers = {
+    host: "localhost:8080",
+    "content-type": `multipart/form-data; boundary=${boundary}`,
+    "content-length": String(payload.length)
+  };
+  if (token) headers.authorization = `Bearer ${token}`;
+  return {
+    method,
+    url: path,
+    headers,
+    async *[Symbol.asyncIterator]() {
+      yield payload;
+    }
+  };
+}
+
 function rewrittenIndexPath(path) {
   const url = new URL(path, "http://localhost:8080");
   const rewrittenPath = url.pathname.startsWith("/api/")
@@ -939,6 +1148,24 @@ function makeReq(method, path, body, token, extraHeaders) {
     host: "localhost:8080",
     "content-type": "application/json",
     ...lowerHeaders(extraHeaders)
+  };
+  if (token) headers.authorization = `Bearer ${token}`;
+  return {
+    method,
+    url: path,
+    headers,
+    async *[Symbol.asyncIterator]() {
+      if (payload) yield Buffer.from(payload);
+    }
+  };
+}
+
+function makeFormReq(method, path, body, token) {
+  const payload = new URLSearchParams(body).toString();
+  const headers = {
+    host: "localhost:8080",
+    "content-type": "application/x-www-form-urlencoded",
+    "content-length": String(Buffer.byteLength(payload))
   };
   if (token) headers.authorization = `Bearer ${token}`;
   return {
@@ -976,6 +1203,28 @@ function parseJson(value) {
   } catch {
     return null;
   }
+}
+
+function signedAlipayNotify(body, privateKey) {
+  const signContent = Object.entries(body)
+    .filter(([, value]) => value !== undefined && value !== null && value !== "")
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([key, value]) => `${key}=${String(value)}`)
+    .join("&");
+  return {
+    ...body,
+    sign_type: "RSA2",
+    sign: crypto.sign("RSA-SHA256", Buffer.from(signContent), privateKey).toString("base64")
+  };
+}
+
+function pngDimensions(dataUrl) {
+  const buffer = Buffer.from(dataUrl.split(",")[1], "base64");
+  assert.equal(buffer.toString("ascii", 1, 4), "PNG");
+  return {
+    width: buffer.readUInt32BE(16),
+    height: buffer.readUInt32BE(20)
+  };
 }
 
 function restoreEnv(key, value) {

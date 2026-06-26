@@ -31,8 +31,8 @@
 | 分享 | `POST /api/v1/projects/:projectId/shares` | 创建项目只读分享链接。 | 画布页/项目操作菜单 - 分享。 |
 | 分享 | `GET /api/v1/shares/:shareCode` | 公开访问分享内容，返回项目标题、只读画布、素材预览地址。 | 分享落地页/外部访问的只读画布页。 |
 | 分享 | `DELETE /api/v1/projects/:projectId/shares/:shareCode` | 关闭项目分享链接。 | 画布页/项目操作菜单 - 取消分享/关闭分享。 |
-| 素材 | `POST /api/v1/assets/upload-tickets` | 申请 OSS 或本地 mock 上传凭证。 | 画布页上传图片/视频/文件、素材页上传入口、聊天附件上传前置步骤。 |
-| 素材 | `POST /api/v1/assets` | 文件上传完成后确认入库并触发/记录内容安全状态。 | 画布页上传完成、素材页上传完成、聊天附件上传完成。 |
+| 素材 | `POST /api/v1/assets/upload-tickets` | 接收本地文件，后端上传到 OSS 后登记素材并直接返回 OSS URL，同时触发/记录内容安全状态。 | 画布页上传图片/视频/文件、素材页上传入口、聊天附件上传完成。 |
+| 素材 | `POST /api/v1/assets` | 与 upload-tickets 功能合并的兼容入口，接收本地文件并上传 OSS 后返回 URL。 | 画布页上传完成、素材页上传完成、聊天附件上传完成。 |
 | 素材 | `GET /api/v1/assets` | 查询素材列表，支持 scope/type/source/keyword/projectId 筛选。 | 项目/素材页 - 智能推荐、素材中心、我的素材、我的收藏、我的文件；画布页素材面板。 |
 | 素材 | `GET /api/v1/assets/:assetId` | 获取素材元数据、预览地址、下载地址。 | 素材详情弹窗、画布节点预览、单个素材下载。 |
 | 素材 | `PUT /api/v1/assets/:assetId/favorite` | 收藏素材。 | 素材卡片/素材详情 - 收藏。 |
@@ -46,7 +46,7 @@
 | 生成任务 | `GET /api/v1/generation-tasks` | 查询任务列表，支持项目、状态、类型、关键词、日期筛选。 | 画布页 - 历史记录，恢复运行中任务。 |
 | 生成任务 | `GET /api/v1/generation-tasks/:taskId` | 轮询任务进度、结果素材、失败原因。 | 画布页 - 生成中进度条/结果回填；前端建议约 2 秒轮询。 |
 | 生成任务 | `POST /api/v1/generation-tasks/:taskId/cancel` | 取消排队中或可取消的运行中生成任务。 | 画布页 - 生成任务卡片取消按钮。 |
-| 模型网关 | `GET /api/v1/provider/chat/models` | 返回聊天网关可选模型列表，供 `/api/v1/provider/chat/completions` 使用。 | 画布页右侧聊天面板、智能体/Codex skill 提取 - 模型下拉选择。 |
+| 模型网关 | `GET /api/v1/provider/chat/models?type=chat/image/video` | 按类型返回真实可调用的网关模型列表：`chat` 对应多模态对话，`image` 对应图片生成，`video` 对应视频生成；不传默认 `chat`。 | 画布页右侧聊天面板、图片生成面板、视频生成面板 - 模型下拉选择。 |
 | 模型网关 | `POST /api/v1/provider/chat/completions` | 后端代理 302.AI OpenAI 兼容聊天接口；支持 `stream=true`，SSE 直接透传，前端不接触 API Key。 | 画布页右侧聊天面板、智能体/Codex skill 提取等需要 ChatGPT SSE 的入口。 |
 | 模型网关 | `POST /api/v1/provider/images/generations` | 后端代理 302.AI OpenAI 兼容图片生成接口；支持 `image2.0` 和 `Nanobanana 2.0` 模型别名，支持流式图片事件透传。 | 画布页 - 图片生成节点、图片创作面板。 |
 | 模型网关 | `POST /api/v1/provider/videos/generations` | 官方视频模型统一入口；同一接口通过 `model` 切换 `seedance2.0` 和 `happy-horse`，支持将任务状态包装为 ChatGPT/OpenAI 风格 SSE。 | 画布页 - 视频生成节点、图生视频/文生视频面板、商品视频生成入口。 |

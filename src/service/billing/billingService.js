@@ -78,19 +78,22 @@ export async function createPayment(userId, orderNo, body) {
   order.status = "PAYING";
   order.updatedAt = new Date().toISOString();
   const channelPayment = await safeCreateChannelPayment(order, body.payType);
+  const transactionKey = `${orderNo}:${body.payType}`;
+  const existingTransaction = store.transactions.get(transactionKey);
+  const now = new Date().toISOString();
   const transaction = {
-    id: nextId(),
-    transactionNo: newOrderNo("PT"),
+    id: existingTransaction?.id || nextId(),
+    transactionNo: existingTransaction?.transactionNo || newOrderNo("PT"),
     orderNo,
     payType: body.payType,
-    channelTransactionNo: null,
+    channelTransactionNo: existingTransaction?.channelTransactionNo || null,
     status: "CREATED",
     qrCodeContent: channelPayment.qrCodeContent,
     redirectUrl: channelPayment.redirectUrl,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
+    createdAt: existingTransaction?.createdAt || now,
+    updatedAt: now
   };
-  store.transactions.set(`${orderNo}:${body.payType}`, transaction);
+  store.transactions.set(transactionKey, transaction);
   return {
     payType: transaction.payType,
     qrCodeContent: transaction.qrCodeContent,
@@ -120,14 +123,14 @@ export function completeLocalPayment(userId, orderNo) {
 }
 
 export function notifyPayment(payType, body, headers = {}) {
-  verifyPaymentNotify(body, headers);
-  const order = store.orders.get(body.orderNo);
+  const payment = parsePaymentNotify(payType, body, headers);
+  const order = store.orders.get(payment.orderNo);
   if (!order) throw notFound("订单不存在");
-  if (order.amountFen !== Number(body.amountFen) || order.currency !== body.currency) {
+  if (order.amountFen !== payment.amountFen || order.currency !== payment.currency) {
     throw conflict("PAYMENT_AMOUNT_MISMATCH", "支付金额或币种不一致");
   }
-  completeOrder(order, body.channelTransactionNo || `${payType}-${Date.now()}`);
-  return { code: "SUCCESS" };
+  completeOrder(order, payment.channelTransactionNo || `${payType}-${Date.now()}`);
+  return payType === "ALIPAY" ? "success" : "SUCCESS";
 }
 
 export function cancelAutoRenew(userId) {
@@ -244,6 +247,63 @@ function verifyPaymentNotify(body, headers) {
   if (!safeEqual(signature, expected)) {
     throw forbidden();
   }
+}
+
+function parsePaymentNotify(payType, body, headers) {
+  if (payType === "ALIPAY") {
+    verifyAlipayNotify(body);
+    if (!["TRADE_SUCCESS", "TRADE_FINISHED"].includes(body.trade_status)) {
+      throw conflict("PAYMENT_STATUS_INVALID", "支付状态未成功");
+    }
+    return {
+      orderNo: body.out_trade_no,
+      amountFen: yuanToFen(body.total_amount),
+      currency: "CNY",
+      channelTransactionNo: body.trade_no
+    };
+  }
+  verifyPaymentNotify(body, headers);
+  return {
+    orderNo: body.orderNo,
+    amountFen: Number(body.amountFen),
+    currency: body.currency,
+    channelTransactionNo: body.channelTransactionNo
+  };
+}
+
+function verifyAlipayNotify(body) {
+  if (appConfig.payment.mockEnabled) {
+    return;
+  }
+  if (body.app_id !== appConfig.payment.alipay.appId) {
+    throw forbidden();
+  }
+  const sign = body.sign;
+  if (!sign || !appConfig.payment.alipay.publicKey) {
+    throw forbidden();
+  }
+  const signContent = Object.entries(body)
+    .filter(([key, value]) => key !== "sign" && key !== "sign_type" && value !== undefined && value !== null && value !== "")
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([key, value]) => `${key}=${String(value)}`)
+    .join("&");
+  const verified = crypto.verify(
+    "RSA-SHA256",
+    Buffer.from(signContent),
+    appConfig.payment.alipay.publicKey.replace(/\\n/g, "\n"),
+    Buffer.from(sign, "base64")
+  );
+  if (!verified) {
+    throw forbidden();
+  }
+}
+
+function yuanToFen(value) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) {
+    throw conflict("PAYMENT_AMOUNT_MISMATCH", "支付金额或币种不一致");
+  }
+  return Math.round(amount * 100);
 }
 
 function paymentNotifySignature(body) {

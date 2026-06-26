@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { readFileSync } from "node:fs";
+import QRCode from "qrcode";
 import { appConfig } from "../config/env.js";
 
 export async function createChannelPayment(order, payType) {
@@ -13,7 +14,7 @@ export async function createChannelPayment(order, payType) {
     return createWechatNativePayment(order);
   }
   if (payType === "ALIPAY") {
-    return createAlipayPrecreatePayment(order);
+    return createAlipayPagePayment(order);
   }
   throw new Error(`Unsupported pay type: ${payType}`);
 }
@@ -85,11 +86,11 @@ async function createWechatNativePayment(order) {
   };
 }
 
-async function createAlipayPrecreatePayment(order) {
+async function createAlipayPagePayment(order) {
   const gateway = "https://openapi.alipay.com/gateway.do";
   const params = {
     app_id: appConfig.payment.alipay.appId,
-    method: "alipay.trade.precreate",
+    method: "alipay.trade.page.pay",
     charset: "utf-8",
     format: "JSON",
     sign_type: "RSA2",
@@ -100,34 +101,21 @@ async function createAlipayPrecreatePayment(order) {
       out_trade_no: order.orderNo,
       total_amount: (order.amountFen / 100).toFixed(2),
       subject: order.productName,
-      product_code: "FACE_TO_FACE_PAYMENT"
+      product_code: "FAST_INSTANT_TRADE_PAY"
     })
   };
   const signContent = sortedSignContent(params);
   const sign = crypto.sign("RSA-SHA256", Buffer.from(signContent), appConfig.payment.alipay.privateKey.replace(/\\n/g, "\n")).toString("base64");
-  const body = formBody({ ...params, sign });
-  const response = await fetch(gateway, {
-    method: "POST",
-    headers: {
-      "content-type": "application/x-www-form-urlencoded;charset=utf-8",
-      accept: "application/json"
-    },
-    body
+  const paymentUrl = `${gateway}?${formBody({ ...params, sign })}`;
+  const qrCodeImage = await QRCode.toDataURL(paymentUrl, {
+    errorCorrectionLevel: "M",
+    margin: 4,
+    width: 512
   });
-  const text = await response.text();
-  const result = parseJson(text);
-  const payload = result.alipay_trade_precreate_response || {};
-  if (response.ok && payload.code === "10000") {
-    verifyAlipayResponse(text, "alipay_trade_precreate_response");
-  }
-  if (!response.ok || payload.code !== "10000" || !payload.qr_code) {
-    const errorPayload = result.error_response || payload;
-    throw new Error(`Alipay failed: ${errorPayload.sub_code || errorPayload.code || response.status}`);
-  }
   return {
     payType: "ALIPAY",
-    qrCodeContent: payload.qr_code,
-    redirectUrl: null
+    qrCodeContent: qrCodeImage,
+    redirectUrl: paymentUrl
   };
 }
 
@@ -156,69 +144,4 @@ function formBody(params) {
 function formatBeijingTime(date) {
   const beijing = new Date(date.getTime() + 8 * 60 * 60 * 1000);
   return beijing.toISOString().replace("T", " ").slice(0, 19);
-}
-
-function parseJson(text) {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return {};
-  }
-}
-
-function verifyAlipayResponse(text, responseKey) {
-  const result = JSON.parse(text);
-  const sign = result.sign;
-  const signContent = extractJsonObjectValue(text, responseKey);
-  if (!sign || !signContent) {
-    throw new Error("Alipay response signature missing");
-  }
-  const verified = crypto.verify(
-    "RSA-SHA256",
-    Buffer.from(signContent),
-    appConfig.payment.alipay.publicKey.replace(/\\n/g, "\n"),
-    Buffer.from(sign, "base64")
-  );
-  if (!verified) {
-    throw new Error("Alipay response signature invalid");
-  }
-}
-
-function extractJsonObjectValue(text, key) {
-  const marker = `"${key}"`;
-  const markerIndex = text.indexOf(marker);
-  if (markerIndex < 0) return "";
-  const colonIndex = text.indexOf(":", markerIndex + marker.length);
-  if (colonIndex < 0) return "";
-  const startIndex = text.indexOf("{", colonIndex + 1);
-  if (startIndex < 0) return "";
-  let depth = 0;
-  let inString = false;
-  let escaped = false;
-  for (let index = startIndex; index < text.length; index += 1) {
-    const char = text[index];
-    if (inString) {
-      if (escaped) {
-        escaped = false;
-      } else if (char === "\\") {
-        escaped = true;
-      } else if (char === "\"") {
-        inString = false;
-      }
-      continue;
-    }
-    if (char === "\"") {
-      inString = true;
-      continue;
-    }
-    if (char === "{") {
-      depth += 1;
-    } else if (char === "}") {
-      depth -= 1;
-      if (depth === 0) {
-        return text.slice(startIndex, index + 1);
-      }
-    }
-  }
-  return "";
 }
