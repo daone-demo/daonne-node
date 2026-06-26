@@ -309,7 +309,7 @@ export function openApiSpec() {
       "/v1/generation-tasks": { get: op("任务列表", { query: [queryParam("projectId", "项目 ID"), queryParam("status", "任务状态"), ...pageParams()] }), post: op("创建任务", { headers: [headerParam("Idempotency-Key", "幂等键，建议创建任务时传入")], body: "GenerationTaskCreateRequest" }) },
       "/v1/generation-tasks/{taskId}": { get: op("任务详情", { params: [pathParam("taskId", "生成任务 ID")] }) },
       "/v1/generation-tasks/{taskId}/cancel": { post: op("取消任务", { params: [pathParam("taskId", "生成任务 ID")] }) },
-      "/v1/provider/chat/models": { get: op("模型网关可选模型列表", { query: [queryParam("type", "模型类型：chat/multimodal_chat、image/image_generation、video/video_generation；不传默认 chat")] }) },
+      "/v1/provider/chat/models": { get: op("模型网关可选模型列表", { query: [queryParam("type", "模型类型枚举：chat、image、video；不传默认 chat", { type: "string", enum: ["chat", "image", "video"], default: "chat" })] }) },
       "/v1/provider/chat/completions": { post: op("302.AI 聊天模型网关，支持 ChatGPT/OpenAI SSE", { body: "ProviderChatCompletionRequest" }) },
       "/v1/provider/images/generations": { post: op("302.AI 图片生成模型网关", { body: "ProviderImageGenerationRequest" }) },
       "/v1/provider/videos/generations": { post: op("官方视频模型网关，支持 Seedance 2.0 和 HappyHorse", { body: "ProviderVideoGenerationRequest" }) },

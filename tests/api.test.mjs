@@ -470,6 +470,22 @@ describe("Daone Vercel Node API", () => {
     assert.equal(response.status, 400);
     assert.equal(response.body.code, "PROVIDER_MODEL_TYPE_NOT_SUPPORTED");
 
+    response = await request("GET", "/api/v1/provider/chat/models?type=multimodal_chat", null, token);
+    assert.equal(response.status, 400);
+    assert.equal(response.body.code, "PROVIDER_MODEL_TYPE_NOT_SUPPORTED");
+
+    response = await request("GET", "/api/v1/provider/chat/models?type=image_generation", null, token);
+    assert.equal(response.status, 400);
+    assert.equal(response.body.code, "PROVIDER_MODEL_TYPE_NOT_SUPPORTED");
+
+    response = await request("GET", "/api/v1/provider/chat/models?type=video_generation", null, token);
+    assert.equal(response.status, 400);
+    assert.equal(response.body.code, "PROVIDER_MODEL_TYPE_NOT_SUPPORTED");
+
+    response = await request("GET", "/api/v1/provider/chat/models?type=dialog", null, token);
+    assert.equal(response.status, 400);
+    assert.equal(response.body.code, "PROVIDER_MODEL_TYPE_NOT_SUPPORTED");
+
     response = await request("POST", "/api/v1/provider/chat/completions", {
       model: "gemini-3-1-pro-preview",
       messages: [{ role: "user", content: "hello" }]

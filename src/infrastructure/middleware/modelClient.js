@@ -301,10 +301,10 @@ export function supportedProviderModels(type = "CHAT") {
 }
 
 function normalizeProviderModelType(type) {
-  const value = String(type || "CHAT").trim().toUpperCase().replace(/[-\s]/g, "_");
-  if (["CHAT", "MULTIMODAL_CHAT", "MULTIMODAL", "DIALOG", "CONVERSATION"].includes(value)) return "CHAT";
-  if (["IMAGE", "IMAGE_GENERATION", "IMAGES", "PICTURE"].includes(value)) return "IMAGE";
-  if (["VIDEO", "VIDEO_GENERATION", "VIDEOS"].includes(value)) return "VIDEO";
+  const value = String(type || "chat").trim().toLowerCase();
+  if (value === "chat") return "CHAT";
+  if (value === "image") return "IMAGE";
+  if (value === "video") return "VIDEO";
   throw badRequest("PROVIDER_MODEL_TYPE_NOT_SUPPORTED", "模型类型不支持");
 }
 
