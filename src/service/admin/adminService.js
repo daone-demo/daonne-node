@@ -203,6 +203,14 @@ export function updatePlanStatus(adminUser, planCode, status) {
   return planRow(plan);
 }
 
+export function deletePlan(adminUser, planCode) {
+  const plan = requirePlan(planCode);
+  const before = structuredCloneSafe(plan);
+  plan.deleted = true;
+  plan.updatedAt = now();
+  audit(adminUser, "PLAN_DELETE", "PLAN", plan.planCode, before, plan);
+}
+
 export function modelConfigs() {
   return [...store.models.values()]
     .filter((item) => !item.deleted)
@@ -300,6 +308,14 @@ export function updatePromptTemplateStatus(adminUser, code, status) {
   return promptRow(template);
 }
 
+export function deletePromptTemplate(adminUser, code) {
+  const template = requirePromptTemplate(code);
+  const before = { ...template };
+  template.deleted = true;
+  template.updatedAt = now();
+  audit(adminUser, "PROMPT_TEMPLATE_DELETE", "PROMPT_TEMPLATE", template.code, before, template);
+}
+
 export function inspirations(filters = {}) {
   return [...store.inspirations.values()]
     .filter((item) => !item.deleted)
@@ -344,6 +360,14 @@ export function updateInspirationStatus(adminUser, id, status) {
   item.updatedAt = now();
   audit(adminUser, "INSPIRATION_STATUS_UPDATE", "INSPIRATION", item.id, before, item);
   return inspirationRow(item);
+}
+
+export function deleteInspiration(adminUser, id) {
+  const item = requireInspiration(id);
+  const before = { ...item };
+  item.deleted = true;
+  item.updatedAt = now();
+  audit(adminUser, "INSPIRATION_DELETE", "INSPIRATION", item.id, before, item);
 }
 
 export function categories(filters = {}) {
@@ -525,6 +549,14 @@ export function updateInvoiceStatus(adminUser, id, status, body = {}) {
   item.updatedAt = now();
   audit(adminUser, "INVOICE_STATUS_UPDATE", "INVOICE", item.id, before, item);
   return invoiceRow(item);
+}
+
+export function deleteInvoice(adminUser, id) {
+  const item = requireInvoice(id);
+  const before = { ...item };
+  item.deleted = true;
+  item.updatedAt = now();
+  audit(adminUser, "INVOICE_DELETE", "INVOICE", item.id, before, item);
 }
 
 function userRow(user) {

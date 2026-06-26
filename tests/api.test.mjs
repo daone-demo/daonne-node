@@ -489,6 +489,22 @@ describe("Daone Vercel Node API", () => {
     assert.equal(response.status, 400);
     assert.equal(response.body.code, "PROVIDER_MODEL_TYPE_NOT_SUPPORTED");
 
+    response = await request("GET", "/api/v1/provider/chat/models?type=multimodal_chat", null, token);
+    assert.equal(response.status, 400);
+    assert.equal(response.body.code, "PROVIDER_MODEL_TYPE_NOT_SUPPORTED");
+
+    response = await request("GET", "/api/v1/provider/chat/models?type=image_generation", null, token);
+    assert.equal(response.status, 400);
+    assert.equal(response.body.code, "PROVIDER_MODEL_TYPE_NOT_SUPPORTED");
+
+    response = await request("GET", "/api/v1/provider/chat/models?type=video_generation", null, token);
+    assert.equal(response.status, 400);
+    assert.equal(response.body.code, "PROVIDER_MODEL_TYPE_NOT_SUPPORTED");
+
+    response = await request("GET", "/api/v1/provider/chat/models?type=dialog", null, token);
+    assert.equal(response.status, 400);
+    assert.equal(response.body.code, "PROVIDER_MODEL_TYPE_NOT_SUPPORTED");
+
     response = await request("POST", "/api/v1/provider/chat/completions", {
       model: "gemini-3-1-pro-preview",
       messages: [{ role: "user", content: "hello" }]
@@ -698,6 +714,12 @@ describe("Daone Vercel Node API", () => {
     assert.equal(response.status, 200);
     assert.equal(response.body.data.status, "DISABLED");
 
+    response = await request("DELETE", "/api/admin/v1/plans/FRONT_FORM", null, token);
+    assert.equal(response.status, 204);
+
+    response = await request("GET", "/api/admin/v1/plans/FRONT_FORM", null, token);
+    assert.equal(response.status, 404);
+
     response = await request("GET", "/api/admin/v1/plans/PRO", null, token);
     assert.equal(response.status, 200);
     assert.equal(response.body.data.planCode, "PRO");
@@ -760,6 +782,12 @@ describe("Daone Vercel Node API", () => {
     assert.equal(response.status, 200);
     assert.equal(response.body.data.status, "DISABLED");
 
+    response = await request("DELETE", "/api/admin/v1/prompt-templates/IMAGE_POSTER", null, token);
+    assert.equal(response.status, 204);
+
+    response = await request("GET", "/api/admin/v1/prompt-templates/IMAGE_POSTER", null, token);
+    assert.equal(response.status, 404);
+
     response = await request("POST", "/api/admin/v1/categories", {
       categoryCode: "ECOMMERCE",
       categoryName: "电商营销",
@@ -804,6 +832,12 @@ describe("Daone Vercel Node API", () => {
     assert.equal(response.status, 200);
     assert.equal(response.body.data.id, adminWorkflowId);
 
+    response = await request("DELETE", `/api/admin/v1/workflows/${adminWorkflowId}`, null, token);
+    assert.equal(response.status, 204);
+
+    response = await request("GET", `/api/admin/v1/workflows/${adminWorkflowId}`, null, token);
+    assert.equal(response.status, 404);
+
     response = await request("POST", "/api/admin/v1/invoices", {
       userId: firstUserId,
       orderNo,
@@ -820,6 +854,12 @@ describe("Daone Vercel Node API", () => {
     assert.equal(response.status, 200);
     assert.equal(response.body.data.status, "ISSUED");
     assert.ok(response.body.data.issuedAt);
+
+    response = await request("DELETE", `/api/admin/v1/invoices/${invoiceId}`, null, token);
+    assert.equal(response.status, 204);
+
+    response = await request("GET", `/api/admin/v1/invoices/${invoiceId}`, null, token);
+    assert.equal(response.status, 404);
 
     response = await request("GET", `/api/admin/v1/orders/${orderNo}`, null, token);
     assert.equal(response.status, 200);
@@ -839,6 +879,18 @@ describe("Daone Vercel Node API", () => {
     response = await request("PATCH", `/api/admin/v1/inspirations/${inspirationId}/status`, { status: "DISABLED" }, token);
     assert.equal(response.status, 200);
     assert.equal(response.body.data.status, "DISABLED");
+
+    response = await request("DELETE", `/api/admin/v1/inspirations/${inspirationId}`, null, token);
+    assert.equal(response.status, 204);
+
+    response = await request("GET", `/api/admin/v1/inspirations/${inspirationId}`, null, token);
+    assert.equal(response.status, 404);
+
+    response = await request("DELETE", "/api/admin/v1/categories/ECOMMERCE", null, token);
+    assert.equal(response.status, 204);
+
+    response = await request("GET", "/api/admin/v1/categories/ECOMMERCE", null, token);
+    assert.equal(response.status, 404);
 
     response = await request("DELETE", `/api/v1/projects/${projectId}/shares/${shareCode}`, null, token);
     assert.equal(response.status, 204);
