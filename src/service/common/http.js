@@ -17,6 +17,9 @@ export async function readBody(req) {
   if (contentType.includes("multipart/form-data")) {
     return readMultipartForm(req, contentType);
   }
+  if (contentType.includes("application/x-www-form-urlencoded")) {
+    return readUrlEncodedForm(req);
+  }
   return readJson(req);
 }
 
@@ -26,6 +29,11 @@ async function readRawBody(req) {
     chunks.push(Buffer.from(chunk));
   }
   return Buffer.concat(chunks);
+}
+
+async function readUrlEncodedForm(req) {
+  const raw = (await readRawBody(req)).toString("utf8");
+  return Object.fromEntries(new URLSearchParams(raw));
 }
 
 async function readMultipartForm(req, contentType) {

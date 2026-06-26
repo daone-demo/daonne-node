@@ -140,7 +140,7 @@ router.post("/api/v1/orders/:orderNo/mock-paid", async ({ user, params }) => {
   billingService.completeLocalPayment(user.id, params.orderNo);
   return null;
 });
-router.post("/api/v1/payments/:payType/notify", async ({ params, body, req }) => billingService.notifyPayment(params.payType.toUpperCase(), body, req.headers), { public: true, rawSuccess: true });
+router.post("/api/v1/payments/:payType/notify", async ({ params, body, req }) => rawText(billingService.notifyPayment(params.payType.toUpperCase(), body, req.headers)), { public: true });
 router.post("/api/v1/subscriptions/cancel-auto-renew", async ({ user }) => {
   billingService.cancelAutoRenew(user.id);
   return null;
@@ -264,6 +264,10 @@ export async function handleRequest(req, res) {
       sendRawJson(res, 200, result.data, trace);
       return;
     }
+    if (result?.__rawText) {
+      sendRawText(res, 200, result.text, trace);
+      return;
+    }
     if (matched.options.rawSuccess) {
       sendJson(res, 200, result, trace);
       return;
@@ -318,11 +322,22 @@ function rawJson(data) {
   return { __rawJson: true, data };
 }
 
+function rawText(text) {
+  return { __rawText: true, text };
+}
+
 function sendRawJson(res, status, payload, trace) {
   res.statusCode = status;
   res.setHeader("content-type", "application/json; charset=utf-8");
   res.setHeader("x-trace-id", trace);
   res.end(JSON.stringify(payload));
+}
+
+function sendRawText(res, status, text, trace) {
+  res.statusCode = status;
+  res.setHeader("content-type", "text/plain; charset=utf-8");
+  res.setHeader("x-trace-id", trace);
+  res.end(String(text ?? ""));
 }
 
 async function sendProviderStream(res, response, trace) {

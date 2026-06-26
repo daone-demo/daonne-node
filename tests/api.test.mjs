@@ -108,6 +108,30 @@ describe("Daone Vercel Node API", () => {
     }
   });
 
+  it("does not allow storage mock outside local runtime", async () => {
+    const { createUploadTicket } = await import("../src/service/creation/assetService.js");
+    const originalVercel = process.env.VERCEL;
+    const originalProfile = appConfig.profile;
+    const originalStorageMock = appConfig.storage.mockEnabled;
+    try {
+      process.env.VERCEL = "1";
+      appConfig.profile = "test";
+      appConfig.storage.mockEnabled = true;
+      await assert.rejects(
+        () => createUploadTicket("mock-user", {
+          fileName: "photo.png",
+          contentType: "image/png",
+          fileContent: Buffer.from("mock payload").toString("base64")
+        }),
+        (error) => error.code === "STORAGE_MOCK_NOT_ALLOWED"
+      );
+    } finally {
+      restoreEnv("VERCEL", originalVercel);
+      appConfig.profile = originalProfile;
+      appConfig.storage.mockEnabled = originalStorageMock;
+    }
+  });
+
   it("supports core frontend flow", async () => {
     let response = await request("POST", "/api/v1/auth/sms-codes", {
       phone: "13800138000",
@@ -821,21 +845,12 @@ describe("Daone Vercel Node API", () => {
     assert.equal(response.body.data.canvasData.meta.projectName, "新名称");
   });
 
-  it("creates signed Alipay precreate payments with qr code content", async () => {
+  it("creates signed Alipay page payments with redirect url", async () => {
     const { privateKey, publicKey } = crypto.generateKeyPairSync("rsa", {
       modulusLength: 2048,
       privateKeyEncoding: { type: "pkcs8", format: "pem" },
       publicKeyEncoding: { type: "spki", format: "pem" }
     });
-    const responseContent = JSON.stringify({
-      code: "10000",
-      msg: "Success",
-      out_trade_no: "DNTEST",
-      qr_code: "https://qr.alipay.com/test"
-    });
-    const sign = crypto.sign("RSA-SHA256", Buffer.from(responseContent), privateKey).toString("base64");
-    const responseText = `{"alipay_trade_precreate_response":${responseContent},"sign":"${sign}"}`;
-    const originalFetch = globalThis.fetch;
     const originalProfile = appConfig.profile;
     const originalPaymentMock = appConfig.payment.mockEnabled;
     const originalAlipay = { ...appConfig.payment.alipay };
@@ -846,30 +861,95 @@ describe("Daone Vercel Node API", () => {
       appConfig.payment.alipay.privateKey = privateKey;
       appConfig.payment.alipay.publicKey = publicKey;
       appConfig.payment.alipay.notifyUrl = "https://www.daoneai.com/api/v1/payments/ALIPAY/notify";
-      globalThis.fetch = async (url, options) => {
-        assert.equal(url, "https://openapi.alipay.com/gateway.do");
-        assert.equal(options.method, "POST");
-        assert.match(options.body, /method=alipay\.trade\.precreate/);
-        assert.match(options.body, /sign=/);
-        return new Response(responseText, {
-          status: 200,
-          headers: { "content-type": "application/json" }
-        });
-      };
       const payment = await createChannelPayment({
         orderNo: "DNTEST",
         productName: "测试套餐",
         amountFen: 9900,
         currency: "CNY"
       }, "ALIPAY");
-      assert.deepEqual(payment, {
-        payType: "ALIPAY",
-        qrCodeContent: "https://qr.alipay.com/test",
-        redirectUrl: null
-      });
+      assert.equal(payment.payType, "ALIPAY");
+      assert.equal(payment.qrCodeContent, null);
+      assert.match(payment.redirectUrl, /^https:\/\/openapi\.alipay\.com\/gateway\.do\?/);
+      const url = new URL(payment.redirectUrl);
+      assert.equal(url.searchParams.get("method"), "alipay.trade.page.pay");
+      assert.equal(url.searchParams.get("app_id"), "2021000000000000");
+      const bizContent = JSON.parse(url.searchParams.get("biz_content"));
+      assert.equal(bizContent.out_trade_no, "DNTEST");
+      assert.equal(bizContent.total_amount, "99.00");
+      assert.equal(bizContent.subject, "测试套餐");
+      assert.equal(bizContent.product_code, "FAST_INSTANT_TRADE_PAY");
+      const sign = url.searchParams.get("sign");
+      url.searchParams.delete("sign");
+      const signContent = [...url.searchParams.entries()]
+        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+        .map(([key, value]) => `${key}=${value}`)
+        .join("&");
+      assert.equal(crypto.verify("RSA-SHA256", Buffer.from(signContent), publicKey, Buffer.from(sign, "base64")), true);
     } finally {
-      globalThis.fetch = originalFetch;
       appConfig.profile = originalProfile;
+      appConfig.payment.mockEnabled = originalPaymentMock;
+      appConfig.payment.alipay = originalAlipay;
+    }
+  });
+
+  it("accepts signed Alipay page payment notifications", async () => {
+    const { privateKey, publicKey } = crypto.generateKeyPairSync("rsa", {
+      modulusLength: 2048,
+      privateKeyEncoding: { type: "pkcs8", format: "pem" },
+      publicKeyEncoding: { type: "spki", format: "pem" }
+    });
+    const originalPaymentMock = appConfig.payment.mockEnabled;
+    const originalAlipay = { ...appConfig.payment.alipay };
+    try {
+      appConfig.payment.mockEnabled = false;
+      appConfig.payment.alipay.appId = "2021000000000000";
+      appConfig.payment.alipay.privateKey = privateKey;
+      appConfig.payment.alipay.publicKey = publicKey;
+      appConfig.payment.alipay.notifyUrl = "https://www.daoneai.com/api/v1/payments/ALIPAY/notify";
+
+      let response = await request("POST", "/api/v1/auth/sms-codes", {
+        phone: "13800138006",
+        scene: "LOGIN"
+      });
+      assert.equal(response.status, 200);
+
+      response = await request("POST", "/api/v1/auth/sms-login", {
+        phone: "13800138006",
+        code: "123456"
+      });
+      assert.equal(response.status, 200);
+      const token = response.body.data.token;
+
+      response = await request("POST", "/api/v1/orders", {
+        orderType: "PLAN",
+        productCode: "TEAM_MONTH"
+      }, token, { "Idempotency-Key": "alipay-order-1" });
+      assert.equal(response.status, 200);
+      const orderNo = response.body.data.orderNo;
+
+      response = await request("POST", `/api/v1/orders/${orderNo}/payments`, {
+        payType: "ALIPAY"
+      }, token);
+      assert.equal(response.status, 200);
+      assert.ok(response.body.data.redirectUrl);
+
+      const notifyBody = signedAlipayNotify({
+        app_id: "2021000000000000",
+        trade_no: "2026062622000000000001",
+        out_trade_no: orderNo,
+        trade_status: "TRADE_SUCCESS",
+        total_amount: "699.00",
+        seller_id: "2088000000000000",
+        timestamp: "2026-06-26 12:00:00"
+      }, privateKey);
+      response = await requestForm("POST", "/api/v1/payments/ALIPAY/notify", notifyBody);
+      assert.equal(response.status, 200);
+      assert.equal(response.rawBody, "success");
+
+      response = await request("GET", `/api/v1/orders/${orderNo}`, null, token);
+      assert.equal(response.status, 200);
+      assert.equal(response.body.data.status, "PAID");
+    } finally {
       appConfig.payment.mockEnabled = originalPaymentMock;
       appConfig.payment.alipay = originalAlipay;
     }
@@ -890,6 +970,18 @@ async function request(method, path, body = null, token = null, extraHeaders = {
 
 async function requestMultipart(method, path, body, token = null) {
   const req = makeMultipartReq(method, path, body, token);
+  const res = makeRes();
+  await handleRequest(req, res);
+  return {
+    status: res.statusCode,
+    body: parseJson(res.body),
+    rawBody: res.body,
+    headers: res.headers
+  };
+}
+
+async function requestForm(method, path, body, token = null) {
+  const req = makeFormReq(method, path, body, token);
   const res = makeRes();
   await handleRequest(req, res);
   return {
@@ -974,6 +1066,24 @@ function makeReq(method, path, body, token, extraHeaders) {
   };
 }
 
+function makeFormReq(method, path, body, token) {
+  const payload = new URLSearchParams(body).toString();
+  const headers = {
+    host: "localhost:8080",
+    "content-type": "application/x-www-form-urlencoded",
+    "content-length": String(Buffer.byteLength(payload))
+  };
+  if (token) headers.authorization = `Bearer ${token}`;
+  return {
+    method,
+    url: path,
+    headers,
+    async *[Symbol.asyncIterator]() {
+      if (payload) yield Buffer.from(payload);
+    }
+  };
+}
+
 function makeRes() {
   return {
     statusCode: 200,
@@ -999,6 +1109,19 @@ function parseJson(value) {
   } catch {
     return null;
   }
+}
+
+function signedAlipayNotify(body, privateKey) {
+  const signContent = Object.entries(body)
+    .filter(([, value]) => value !== undefined && value !== null && value !== "")
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([key, value]) => `${key}=${String(value)}`)
+    .join("&");
+  return {
+    ...body,
+    sign_type: "RSA2",
+    sign: crypto.sign("RSA-SHA256", Buffer.from(signContent), privateKey).toString("base64")
+  };
 }
 
 function restoreEnv(key, value) {

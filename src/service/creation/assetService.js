@@ -96,6 +96,9 @@ function stripDataUrlPrefix(value) {
 
 async function uploadObjectToStorage(upload) {
   if (appConfig.storage.mockEnabled) {
+    if (!isLocalRuntime()) {
+      throw badGateway("STORAGE_MOCK_NOT_ALLOWED", "Storage mock 仅允许本地环境使用");
+    }
     return;
   }
   if (!upload.content) {
@@ -113,6 +116,10 @@ async function uploadObjectToStorage(upload) {
       reason: responseBody.slice(0, 500)
     });
   }
+}
+
+function isLocalRuntime() {
+  return appConfig.profile === "local" && !process.env.VERCEL && !process.env.VERCEL_ENV;
 }
 
 export function listAssets(userId, query) {

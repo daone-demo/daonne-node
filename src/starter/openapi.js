@@ -181,11 +181,17 @@ export function openApiSpec() {
           payType: string("WECHAT", "支付方式：WECHAT、ALIPAY")
         }, "创建支付请求", ["payType"]),
         PaymentNotifyRequest: object({
-          orderNo: string("DN202606170001", "订单号"),
-          amountFen: integer(9900, "支付金额，单位分"),
-          currency: string("CNY", "币种"),
-          channelTransactionNo: string("WX123456789", "渠道交易号")
-        }, "支付回调请求", ["orderNo", "amountFen", "currency"]),
+          orderNo: string("DN202606170001", "微信占位回调订单号"),
+          amountFen: integer(9900, "微信占位回调支付金额，单位分"),
+          currency: string("CNY", "微信占位回调币种"),
+          channelTransactionNo: string("WX123456789", "微信占位回调渠道交易号"),
+          out_trade_no: string("DN202606170001", "支付宝回调订单号"),
+          trade_no: string("2026062622000000000001", "支付宝交易号"),
+          trade_status: string("TRADE_SUCCESS", "支付宝交易状态"),
+          total_amount: string("99.00", "支付宝支付金额，单位元"),
+          app_id: string("2021006164633074", "支付宝应用 ID"),
+          sign: string("base64-signature", "支付宝 RSA2 签名")
+        }, "支付回调请求。微信当前使用 JSON + X-Daone-Payment-Signature 占位验签；支付宝使用 application/x-www-form-urlencoded 官方表单通知并校验 sign。"),
         AdminUserStatusRequest: object({
           status: string("ENABLED", "用户状态")
         }, "修改用户状态请求", ["status"]),
@@ -314,7 +320,7 @@ export function openApiSpec() {
       "/v1/orders/{orderNo}": { get: op("订单详情", { params: [pathParam("orderNo", "订单号")] }) },
       "/v1/orders/{orderNo}/payments": { post: op("创建支付", { params: [pathParam("orderNo", "订单号")], body: "PaymentCreateRequest" }) },
       "/v1/orders/{orderNo}/mock-paid": { post: op("本地模拟支付成功", { params: [pathParam("orderNo", "订单号")] }) },
-      "/v1/payments/{payType}/notify": { post: op("支付服务端通知", { public: true, params: [pathParam("payType", "支付方式：WECHAT、ALIPAY")], headers: [headerParam("X-Daone-Payment-Signature", "支付通知签名")], body: "PaymentNotifyRequest" }) },
+      "/v1/payments/{payType}/notify": { post: op("支付服务端通知", { public: true, params: [pathParam("payType", "支付方式：WECHAT、ALIPAY")], headers: [headerParam("X-Daone-Payment-Signature", "微信占位回调签名；支付宝回调不使用该请求头")], body: "PaymentNotifyRequest" }) },
       "/v1/subscriptions/cancel-auto-renew": { post: op("取消自动续费") },
       "/v1/home": { get: op("首页聚合", { public: true, query: [queryParam("categoryCode", "灵感分类编码，默认 ALL")] }) },
       "/admin/v1/dashboard": { get: op("后台首页运营概览") },
