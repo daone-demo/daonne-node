@@ -11,6 +11,14 @@ export async function sendSmsCode(phone, scene = "LOGIN") {
   const normalizedPhone = normalizePhone(phone);
   const normalizedScene = normalizeScene(scene);
   assertPhone(normalizedPhone);
+  logSms("sms_code_send_start", {
+    phone: maskPhone(normalizedPhone),
+    scene: normalizedScene,
+    requestedScene: String(scene || "LOGIN"),
+    profile: appConfig.profile,
+    smsMockEnabled: appConfig.sms.mockEnabled,
+    redisCacheEnabled: redisCacheEnabled()
+  });
   const code = appConfig.sms.mockEnabled ? appConfig.auth.localSmsCode : randomSmsCode();
   const payload = {
     code,
@@ -24,10 +32,29 @@ export async function sendSmsCode(phone, scene = "LOGIN") {
   } else {
     store.smsCodes.set(key, payload);
   }
+  logSms("sms_code_cache_written", {
+    phone: maskPhone(normalizedPhone),
+    scene: normalizedScene,
+    cache: redisCacheEnabled() ? "redis" : "memory",
+    ttlSeconds: appConfig.auth.smsCodeTtlSeconds
+  });
   try {
     await sendSms(normalizedPhone, code, normalizedScene);
+    logSms("sms_code_send_success", {
+      phone: maskPhone(normalizedPhone),
+      scene: normalizedScene
+    });
   } catch (error) {
     await deleteSmsCode(normalizedPhone, normalizedScene);
+    logSms("sms_code_send_failed_cache_deleted", {
+      phone: maskPhone(normalizedPhone),
+      scene: normalizedScene,
+      errorName: error.name,
+      errorMessage: error.message,
+      providerCode: error.providerCode,
+      providerMessage: error.providerMessage,
+      providerRequestId: error.providerRequestId
+    }, "error");
     throw error;
   }
   return { retryAfterSeconds: 60 };
@@ -302,4 +329,17 @@ function tokenKey(token) {
 
 function randomSmsCode() {
   return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+function maskPhone(phone) {
+  return String(phone || "").replace(/^(\d{3})\d{4}(\d{4})$/, "$1****$2");
+}
+
+function logSms(event, fields, level = "info") {
+  const payload = {
+    scope: "auth.sms",
+    event,
+    ...fields
+  };
+  console[level](JSON.stringify(payload));
 }
