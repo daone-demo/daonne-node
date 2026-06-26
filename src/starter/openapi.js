@@ -499,31 +499,332 @@ export function docsHtml() {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Daone Node API Swagger UI</title>
-  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5.17.14/swagger-ui.css" />
+  <title>Daone Node API Knife4j</title>
   <style>
-    body{margin:0;background:#fff}
-    .swagger-ui .topbar{display:none}
+    :root{
+      color-scheme:light;
+      --bg:#f5f7fb;
+      --panel:#fff;
+      --panel-soft:#f8fafc;
+      --line:#e5e9f2;
+      --line-strong:#d6dde9;
+      --text:#1f2a37;
+      --muted:#6b7280;
+      --primary:#1677ff;
+      --primary-soft:#e8f2ff;
+      --green:#18a058;
+      --orange:#f59e0b;
+      --red:#ef4444;
+      --purple:#7c3aed;
+      --shadow:0 8px 24px rgba(28,39,60,.08);
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",Arial,sans-serif;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;background:var(--bg);color:var(--text);font-size:14px}
+    button,input{font:inherit}
+    .app{height:100vh;display:grid;grid-template-rows:56px 1fr;overflow:hidden}
+    .topbar{display:flex;align-items:center;gap:18px;padding:0 22px;background:#1f2937;color:#fff;box-shadow:var(--shadow);z-index:3}
+    .brand{display:flex;align-items:center;gap:10px;min-width:220px;font-weight:700;font-size:17px}
+    .brand-mark{display:grid;place-items:center;width:30px;height:30px;border-radius:6px;background:var(--primary);font-size:15px}
+    .top-meta{display:flex;align-items:center;gap:12px;color:#cbd5e1;font-size:13px;white-space:nowrap}
+    .top-link{margin-left:auto;color:#dbeafe;text-decoration:none;font-size:13px}
+    .layout{display:grid;grid-template-columns:300px minmax(0,1fr);height:100%;min-height:0}
+    .sidebar{display:grid;grid-template-rows:auto 1fr;background:var(--panel);border-right:1px solid var(--line);min-height:0}
+    .search-box{padding:14px;border-bottom:1px solid var(--line)}
+    .search-box input{width:100%;height:36px;border:1px solid var(--line-strong);border-radius:6px;padding:0 12px;background:#fff;color:var(--text);outline:none}
+    .search-box input:focus{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-soft)}
+    .nav{overflow:auto;padding:8px 8px 18px}
+    .nav-group{margin-bottom:6px}
+    .nav-group-title{display:flex;align-items:center;justify-content:space-between;width:100%;height:34px;border:0;background:transparent;border-radius:6px;padding:0 9px;color:#334155;font-weight:650;cursor:pointer}
+    .nav-group-title:hover,.nav-item:hover{background:var(--panel-soft)}
+    .nav-count{color:var(--muted);font-size:12px;font-weight:500}
+    .nav-item{display:grid;grid-template-columns:54px minmax(0,1fr);gap:8px;width:100%;border:0;background:transparent;border-radius:6px;padding:8px 9px;text-align:left;cursor:pointer;color:var(--text)}
+    .nav-item.active{background:var(--primary-soft);color:#0758bf}
+    .method{display:inline-flex;align-items:center;justify-content:center;height:22px;border-radius:4px;color:#fff;font-weight:700;font-size:11px;letter-spacing:0;text-transform:uppercase}
+    .method.get{background:var(--green)}
+    .method.post{background:var(--primary)}
+    .method.put{background:var(--orange)}
+    .method.patch{background:var(--purple)}
+    .method.delete{background:var(--red)}
+    .method.other{background:#64748b}
+    .nav-summary{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
+    .nav-path{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);font-size:12px;margin-top:2px}
+    .main{overflow:auto;min-width:0}
+    .content{max-width:1180px;margin:0 auto;padding:22px}
+    .hero,.section{background:var(--panel);border:1px solid var(--line);border-radius:8px;box-shadow:var(--shadow)}
+    .hero{padding:22px;margin-bottom:16px}
+    .hero h1{margin:0 0 8px;font-size:24px;line-height:1.25;letter-spacing:0}
+    .hero p{margin:0;color:var(--muted);line-height:1.7}
+    .stats{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}
+    .stat{display:flex;gap:6px;align-items:center;border:1px solid var(--line);border-radius:6px;background:var(--panel-soft);padding:8px 10px;color:#334155}
+    .toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:16px}
+    .tab{height:34px;border:1px solid var(--line-strong);background:#fff;border-radius:6px;padding:0 12px;color:#334155;cursor:pointer}
+    .tab.active{border-color:var(--primary);background:var(--primary-soft);color:#0758bf;font-weight:650}
+    .auth{display:flex;gap:8px;align-items:center;margin-left:auto;min-width:min(520px,100%)}
+    .auth input{flex:1;min-width:220px;height:34px;border:1px solid var(--line-strong);border-radius:6px;padding:0 10px;outline:none}
+    .auth button,.copy-btn{height:34px;border:0;border-radius:6px;background:var(--primary);color:#fff;padding:0 12px;cursor:pointer}
+    .section{margin-bottom:16px;overflow:hidden}
+    .section-header{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line);background:var(--panel-soft)}
+    .section-title{font-weight:700;font-size:16px}
+    .section-body{padding:16px}
+    .endpoint-title{display:flex;flex-wrap:wrap;align-items:center;gap:10px}
+    .endpoint-path{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;font-size:16px;overflow-wrap:anywhere}
+    .desc{color:var(--muted);line-height:1.7;margin:8px 0 0}
+    table{width:100%;border-collapse:collapse;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+    th,td{border-bottom:1px solid var(--line);padding:10px 12px;text-align:left;vertical-align:top}
+    th{background:var(--panel-soft);color:#475569;font-weight:650}
+    tr:last-child td{border-bottom:0}
+    code,pre{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace}
+    code{color:#0f766e}
+    pre{margin:0;white-space:pre-wrap;overflow:auto;background:#111827;color:#e5e7eb;border-radius:6px;padding:14px;line-height:1.55;font-size:13px}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    .empty{padding:36px;text-align:center;color:var(--muted)}
+    .schema-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+    .schema-card{border:1px solid var(--line);border-radius:8px;background:#fff;overflow:hidden}
+    .schema-card h3{margin:0;padding:12px 14px;border-bottom:1px solid var(--line);font-size:15px;background:var(--panel-soft)}
+    .schema-card pre{border-radius:0;background:#0f172a}
+    .hidden{display:none!important}
+    @media (max-width:860px){
+      .layout{grid-template-columns:1fr}
+      .sidebar{height:42vh;border-right:0;border-bottom:1px solid var(--line)}
+      .content{padding:14px}
+      .grid{grid-template-columns:1fr}
+      .top-meta{display:none}
+      .auth{margin-left:0}
+    }
   </style>
 </head>
 <body>
-  <div id="swagger-ui"></div>
-  <script src="https://unpkg.com/swagger-ui-dist@5.17.14/swagger-ui-bundle.js"></script>
-  <script src="https://unpkg.com/swagger-ui-dist@5.17.14/swagger-ui-standalone-preset.js"></script>
+  <div class="app" data-ui="knife4j">
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark">K</span><span>Daone API 文档</span></div>
+      <div class="top-meta"><span id="api-version">OpenAPI</span><span id="api-server">/api</span></div>
+      <a class="top-link" href="/api/v3/swagger" target="_blank" rel="noreferrer">OpenAPI JSON</a>
+    </header>
+    <div class="layout">
+      <aside class="sidebar">
+        <div class="search-box">
+          <input id="search" type="search" placeholder="搜索接口名称或路径" />
+        </div>
+        <nav id="nav" class="nav" aria-label="接口列表"></nav>
+      </aside>
+      <main class="main">
+        <div class="content">
+          <section class="hero">
+            <h1 id="title">Daone Node API</h1>
+            <p id="description">正在加载接口定义...</p>
+            <div class="stats">
+              <div class="stat"><strong id="path-count">0</strong><span>个路径</span></div>
+              <div class="stat"><strong id="operation-count">0</strong><span>个接口</span></div>
+              <div class="stat"><strong id="schema-count">0</strong><span>个模型</span></div>
+            </div>
+          </section>
+          <div class="toolbar">
+            <button class="tab active" data-view="docs">接口文档</button>
+            <button class="tab" data-view="schemas">数据模型</button>
+            <div class="auth">
+              <input id="token" type="password" placeholder="Bearer Token，用于调试时生成 Authorization 头" />
+              <button id="save-token" type="button">保存</button>
+            </div>
+          </div>
+          <section id="docs-view"></section>
+          <section id="schemas-view" class="hidden"></section>
+        </div>
+      </main>
+    </div>
+  </div>
   <script>
-    window.addEventListener("load", () => {
-      window.ui = SwaggerUIBundle({
-        url: "/api/v3/swagger",
-        dom_id: "#swagger-ui",
-        deepLinking: true,
-        presets: [
-          SwaggerUIBundle.presets.apis,
-          SwaggerUIStandalonePreset
-        ],
-        layout: "StandaloneLayout",
-        persistAuthorization: true,
-        displayRequestDuration: true
+    const state = { spec: null, operations: [], activeId: "", query: "", view: "docs" };
+    const methodOrder = ["get", "post", "put", "patch", "delete", "options", "head"];
+    const methodNames = { get: "GET", post: "POST", put: "PUT", patch: "PATCH", delete: "DELETE", options: "OPTIONS", head: "HEAD" };
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function resolveRef(ref) {
+      if (!ref || !state.spec) return null;
+      const name = ref.replace("#/components/schemas/", "");
+      return state.spec.components?.schemas?.[name] || null;
+    }
+
+    function schemaLabel(schema) {
+      if (!schema) return "-";
+      if (schema.$ref) return schema.$ref.replace("#/components/schemas/", "");
+      if (schema.type === "array") return "array<" + schemaLabel(schema.items) + ">";
+      return schema.type || "object";
+    }
+
+    function schemaExample(schema, seen = new Set()) {
+      if (!schema) return null;
+      if (schema.example !== undefined) return schema.example;
+      if (schema.$ref) {
+        const name = schema.$ref.replace("#/components/schemas/", "");
+        if (seen.has(name)) return {};
+        seen.add(name);
+        return schemaExample(resolveRef(schema.$ref), seen);
+      }
+      if (schema.type === "array") return [schemaExample(schema.items, seen)];
+      if (schema.type === "object" || schema.properties) {
+        return Object.fromEntries(Object.entries(schema.properties || {}).map(([key, value]) => [key, schemaExample(value, seen)]));
+      }
+      if (schema.type === "integer" || schema.type === "number") return 0;
+      if (schema.type === "boolean") return false;
+      return "";
+    }
+
+    function collectOperations(spec) {
+      return Object.entries(spec.paths || {}).flatMap(([path, methods]) => {
+        return methodOrder.filter((method) => methods[method]).map((method) => {
+          const operation = methods[method];
+          const group = path.startsWith("/admin/") ? "管理后台接口" : path.startsWith("/mock-") ? "本地 Mock 接口" : path.startsWith("/v3/") || path === "/doc.html" || path === "/swagger-ui.html" ? "接口文档" : "用户端接口";
+          return {
+            id: method + ":" + path,
+            path,
+            method,
+            group,
+            summary: operation.summary || path,
+            operation
+          };
+        });
       });
+    }
+
+    function renderNav() {
+      const query = state.query.trim().toLowerCase();
+      const filtered = state.operations.filter((item) => {
+        return !query || item.summary.toLowerCase().includes(query) || item.path.toLowerCase().includes(query) || item.method.toLowerCase().includes(query);
+      });
+      const groups = filtered.reduce((acc, item) => {
+        (acc[item.group] ||= []).push(item);
+        return acc;
+      }, {});
+      document.getElementById("nav").innerHTML = Object.entries(groups).map(([group, items]) => {
+        return '<div class="nav-group"><button class="nav-group-title" type="button"><span>' + escapeHtml(group) + '</span><span class="nav-count">' + items.length + '</span></button>' +
+          items.map((item) => '<button class="nav-item ' + (item.id === state.activeId ? "active" : "") + '" type="button" data-id="' + escapeHtml(item.id) + '">' +
+            '<span class="method ' + escapeHtml(item.method) + '">' + methodNames[item.method] + '</span><span><span class="nav-summary">' + escapeHtml(item.summary) + '</span><span class="nav-path">' + escapeHtml(item.path) + '</span></span></button>').join("") +
+          '</div>';
+      }).join("") || '<div class="empty">没有匹配的接口</div>';
+    }
+
+    function renderParameters(parameters = []) {
+      if (!parameters.length) return '<p class="desc">无请求参数。</p>';
+      return '<table><thead><tr><th>名称</th><th>位置</th><th>必填</th><th>类型</th><th>说明</th></tr></thead><tbody>' +
+        parameters.map((param) => '<tr><td><code>' + escapeHtml(param.name) + '</code></td><td>' + escapeHtml(param.in) + '</td><td>' + (param.required ? "是" : "否") + '</td><td>' + escapeHtml(schemaLabel(param.schema)) + '</td><td>' + escapeHtml(param.description || "") + '</td></tr>').join("") +
+        '</tbody></table>';
+    }
+
+    function renderBody(operation) {
+      const body = operation.requestBody?.content?.["application/json"]?.schema;
+      if (!body) return '<p class="desc">无请求体。</p>';
+      return '<div class="grid"><div><table><thead><tr><th>Content-Type</th><th>模型</th><th>必填</th></tr></thead><tbody><tr><td>application/json</td><td><code>' + escapeHtml(schemaLabel(body)) + '</code></td><td>' + (operation.requestBody.required ? "是" : "否") + '</td></tr></tbody></table></div><pre>' + escapeHtml(JSON.stringify(schemaExample(body), null, 2)) + '</pre></div>';
+    }
+
+    function renderResponses(operation) {
+      const responses = Object.entries(operation.responses || {});
+      if (!responses.length) return '<p class="desc">暂无响应定义。</p>';
+      return '<table><thead><tr><th>状态码</th><th>说明</th><th>模型</th></tr></thead><tbody>' +
+        responses.map(([status, response]) => {
+          const schema = response.content?.["application/json"]?.schema;
+          return '<tr><td><code>' + escapeHtml(status) + '</code></td><td>' + escapeHtml(response.description || "") + '</td><td><code>' + escapeHtml(schemaLabel(schema)) + '</code></td></tr>';
+        }).join("") +
+        '</tbody></table>';
+    }
+
+    function renderCurl(item) {
+      const server = state.spec.servers?.[0]?.url || "";
+      const token = localStorage.getItem("daone-doc-token") || "";
+      const lines = ["curl -X " + methodNames[item.method] + " '" + server + item.path + "'"];
+      if (token) lines.push("  -H 'Authorization: Bearer " + token + "'");
+      if (item.operation.requestBody) lines.push("  -H 'Content-Type: application/json' \\\\n  -d '" + JSON.stringify(schemaExample(item.operation.requestBody.content?.["application/json"]?.schema)) + "'");
+      return lines.join(" \\\\n");
+    }
+
+    function renderDocs() {
+      const item = state.operations.find((operation) => operation.id === state.activeId);
+      if (!item) {
+        document.getElementById("docs-view").innerHTML = '<section class="section"><div class="empty">请选择一个接口。</div></section>';
+        return;
+      }
+      document.getElementById("docs-view").innerHTML =
+        '<section class="section"><div class="section-header"><div class="endpoint-title"><span class="method ' + escapeHtml(item.method) + '">' + methodNames[item.method] + '</span><span class="section-title">' + escapeHtml(item.summary) + '</span><span class="endpoint-path">' + escapeHtml(item.path) + '</span></div></div>' +
+        '<div class="section-body"><p class="desc">' + escapeHtml(item.operation.description || "接口基础信息、请求参数和响应结构。") + '</p></div></section>' +
+        '<section class="section"><div class="section-header"><span class="section-title">请求参数</span></div><div class="section-body">' + renderParameters(item.operation.parameters || []) + '</div></section>' +
+        '<section class="section"><div class="section-header"><span class="section-title">请求体</span></div><div class="section-body">' + renderBody(item.operation) + '</div></section>' +
+        '<section class="section"><div class="section-header"><span class="section-title">响应</span></div><div class="section-body">' + renderResponses(item.operation) + '</div></section>' +
+        '<section class="section"><div class="section-header"><span class="section-title">Curl</span><button class="copy-btn" type="button" data-copy="curl">复制</button></div><div class="section-body"><pre id="curl-block">' + escapeHtml(renderCurl(item)) + '</pre></div></section>';
+    }
+
+    function renderSchemas() {
+      const schemas = state.spec.components?.schemas || {};
+      document.getElementById("schemas-view").innerHTML = '<div class="schema-list">' + Object.entries(schemas).map(([name, schema]) => {
+        return '<article class="schema-card"><h3>' + escapeHtml(name) + '</h3><pre>' + escapeHtml(JSON.stringify(schema, null, 2)) + '</pre></article>';
+      }).join("") + '</div>';
+    }
+
+    function setView(view) {
+      state.view = view;
+      document.querySelectorAll(".tab").forEach((button) => button.classList.toggle("active", button.dataset.view === view));
+      document.getElementById("docs-view").classList.toggle("hidden", view !== "docs");
+      document.getElementById("schemas-view").classList.toggle("hidden", view !== "schemas");
+    }
+
+    function renderAll() {
+      renderNav();
+      renderDocs();
+      renderSchemas();
+      setView(state.view);
+    }
+
+    document.addEventListener("click", async (event) => {
+      const navItem = event.target.closest(".nav-item");
+      if (navItem) {
+        state.activeId = navItem.dataset.id;
+        renderAll();
+        document.querySelector(".main").scrollTop = 0;
+        return;
+      }
+      const tab = event.target.closest(".tab");
+      if (tab) setView(tab.dataset.view);
+      if (event.target.dataset.copy === "curl") {
+        await navigator.clipboard?.writeText(document.getElementById("curl-block")?.textContent || "");
+      }
+    });
+
+    document.getElementById("search").addEventListener("input", (event) => {
+      state.query = event.target.value;
+      renderNav();
+    });
+
+    document.getElementById("save-token").addEventListener("click", () => {
+      localStorage.setItem("daone-doc-token", document.getElementById("token").value.trim());
+    });
+
+    async function init() {
+      const token = localStorage.getItem("daone-doc-token") || "";
+      document.getElementById("token").value = token;
+      const response = await fetch("/api/v3/swagger");
+      state.spec = await response.json();
+      state.operations = collectOperations(state.spec);
+      state.activeId = state.operations[0]?.id || "";
+      document.getElementById("title").textContent = state.spec.info?.title || "Daone Node API";
+      document.getElementById("description").textContent = state.spec.info?.description || "";
+      document.getElementById("api-version").textContent = "OpenAPI " + (state.spec.openapi || "");
+      document.getElementById("api-server").textContent = state.spec.servers?.[0]?.url || "/api";
+      document.getElementById("path-count").textContent = Object.keys(state.spec.paths || {}).length;
+      document.getElementById("operation-count").textContent = state.operations.length;
+      document.getElementById("schema-count").textContent = Object.keys(state.spec.components?.schemas || {}).length;
+      renderAll();
+    }
+
+    init().catch((error) => {
+      document.getElementById("docs-view").innerHTML = '<section class="section"><div class="empty">接口定义加载失败：' + escapeHtml(error.message) + '</div></section>';
     });
   </script>
 </body>

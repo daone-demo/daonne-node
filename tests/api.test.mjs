@@ -749,7 +749,7 @@ describe("Daone Vercel Node API", () => {
 
     response = await request("GET", "/api/doc.html");
     assert.equal(response.status, 200);
-    assert.match(response.rawBody, /SwaggerUIBundle/);
+    assert.match(response.rawBody, /data-ui="knife4j"/);
     assert.match(response.rawBody, /\/api\/v3\/swagger/);
   });
 
@@ -868,8 +868,8 @@ describe("Daone Vercel Node API", () => {
         currency: "CNY"
       }, "ALIPAY");
       assert.equal(payment.payType, "ALIPAY");
-      assert.equal(payment.qrCodeContent, null);
       assert.match(payment.redirectUrl, /^https:\/\/openapi\.alipay\.com\/gateway\.do\?/);
+      assert.equal(payment.qrCodeContent, payment.redirectUrl);
       const url = new URL(payment.redirectUrl);
       assert.equal(url.searchParams.get("method"), "alipay.trade.page.pay");
       assert.equal(url.searchParams.get("app_id"), "2021000000000000");

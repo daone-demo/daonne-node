@@ -105,10 +105,11 @@ function createAlipayPagePayment(order) {
   };
   const signContent = sortedSignContent(params);
   const sign = crypto.sign("RSA-SHA256", Buffer.from(signContent), appConfig.payment.alipay.privateKey.replace(/\\n/g, "\n")).toString("base64");
+  const paymentUrl = `${gateway}?${formBody({ ...params, sign })}`;
   return {
     payType: "ALIPAY",
-    qrCodeContent: null,
-    redirectUrl: `${gateway}?${formBody({ ...params, sign })}`
+    qrCodeContent: paymentUrl,
+    redirectUrl: paymentUrl
   };
 }
 
