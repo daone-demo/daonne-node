@@ -869,7 +869,8 @@ describe("Daone Vercel Node API", () => {
       }, "ALIPAY");
       assert.equal(payment.payType, "ALIPAY");
       assert.match(payment.redirectUrl, /^https:\/\/openapi\.alipay\.com\/gateway\.do\?/);
-      assert.equal(payment.qrCodeContent, payment.redirectUrl);
+      assert.match(payment.qrCodeContent, /^data:image\/png;base64,/);
+      assert.deepEqual(pngDimensions(payment.qrCodeContent), { width: 512, height: 512 });
       const url = new URL(payment.redirectUrl);
       assert.equal(url.searchParams.get("method"), "alipay.trade.page.pay");
       assert.equal(url.searchParams.get("app_id"), "2021000000000000");
@@ -932,6 +933,13 @@ describe("Daone Vercel Node API", () => {
       }, token);
       assert.equal(response.status, 200);
       assert.ok(response.body.data.redirectUrl);
+      assert.match(response.body.data.qrCodeContent, /^data:image\/png;base64,/);
+
+      response = await request("POST", `/api/v1/orders/${orderNo}/payments`, {
+        payType: "ALIPAY"
+      }, token);
+      assert.equal(response.status, 200);
+      assert.match(response.body.data.qrCodeContent, /^data:image\/png;base64,/);
 
       const notifyBody = signedAlipayNotify({
         app_id: "2021000000000000",
@@ -1121,6 +1129,15 @@ function signedAlipayNotify(body, privateKey) {
     ...body,
     sign_type: "RSA2",
     sign: crypto.sign("RSA-SHA256", Buffer.from(signContent), privateKey).toString("base64")
+  };
+}
+
+function pngDimensions(dataUrl) {
+  const buffer = Buffer.from(dataUrl.split(",")[1], "base64");
+  assert.equal(buffer.toString("ascii", 1, 4), "PNG");
+  return {
+    width: buffer.readUInt32BE(16),
+    height: buffer.readUInt32BE(20)
   };
 }
 

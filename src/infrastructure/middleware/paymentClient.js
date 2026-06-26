@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { readFileSync } from "node:fs";
+import QRCode from "qrcode";
 import { appConfig } from "../config/env.js";
 
 export async function createChannelPayment(order, payType) {
@@ -85,7 +86,7 @@ async function createWechatNativePayment(order) {
   };
 }
 
-function createAlipayPagePayment(order) {
+async function createAlipayPagePayment(order) {
   const gateway = "https://openapi.alipay.com/gateway.do";
   const params = {
     app_id: appConfig.payment.alipay.appId,
@@ -106,9 +107,14 @@ function createAlipayPagePayment(order) {
   const signContent = sortedSignContent(params);
   const sign = crypto.sign("RSA-SHA256", Buffer.from(signContent), appConfig.payment.alipay.privateKey.replace(/\\n/g, "\n")).toString("base64");
   const paymentUrl = `${gateway}?${formBody({ ...params, sign })}`;
+  const qrCodeImage = await QRCode.toDataURL(paymentUrl, {
+    errorCorrectionLevel: "M",
+    margin: 4,
+    width: 512
+  });
   return {
     payType: "ALIPAY",
-    qrCodeContent: paymentUrl,
+    qrCodeContent: qrCodeImage,
     redirectUrl: paymentUrl
   };
 }

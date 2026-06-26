@@ -563,7 +563,8 @@ export function docsHtml() {
     .tab.active{border-color:var(--primary);background:var(--primary-soft);color:#0758bf;font-weight:650}
     .auth{display:flex;gap:8px;align-items:center;margin-left:auto;min-width:min(520px,100%)}
     .auth input{flex:1;min-width:220px;height:34px;border:1px solid var(--line-strong);border-radius:6px;padding:0 10px;outline:none}
-    .auth button,.copy-btn{height:34px;border:0;border-radius:6px;background:var(--primary);color:#fff;padding:0 12px;cursor:pointer}
+    .auth button,.copy-btn,.send-btn{height:34px;border:0;border-radius:6px;background:var(--primary);color:#fff;padding:0 12px;cursor:pointer}
+    .send-btn:disabled{background:#94a3b8;cursor:not-allowed}
     .section{margin-bottom:16px;overflow:hidden}
     .section-header{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line);background:var(--panel-soft)}
     .section-title{font-weight:700;font-size:16px}
@@ -579,6 +580,22 @@ export function docsHtml() {
     code{color:#0f766e}
     pre{margin:0;white-space:pre-wrap;overflow:auto;background:#111827;color:#e5e7eb;border-radius:6px;padding:14px;line-height:1.55;font-size:13px}
     .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    .debug-form{display:grid;gap:14px}
+    .debug-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+    .field{display:grid;gap:6px}
+    .field label{display:flex;align-items:center;gap:6px;color:#334155;font-weight:650}
+    .field small{color:var(--muted);font-weight:400}
+    .field input,.field textarea{width:100%;border:1px solid var(--line-strong);border-radius:6px;background:#fff;color:var(--text);outline:none}
+    .field input{height:36px;padding:0 10px}
+    .field textarea{min-height:150px;padding:10px 12px;resize:vertical;font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;line-height:1.5}
+    .field input:focus,.field textarea:focus{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-soft)}
+    .required{color:var(--red)}
+    .debug-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+    .debug-url{color:var(--muted);font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;overflow-wrap:anywhere}
+    .response-meta{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+    .badge{display:inline-flex;align-items:center;height:24px;border-radius:4px;background:var(--panel-soft);border:1px solid var(--line);padding:0 8px;color:#334155;font-size:12px}
+    .badge.ok{color:var(--green);border-color:#bbf7d0;background:#f0fdf4}
+    .badge.fail{color:var(--red);border-color:#fecaca;background:#fef2f2}
     .empty{padding:36px;text-align:center;color:var(--muted)}
     .schema-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
     .schema-card{border:1px solid var(--line);border-radius:8px;background:#fff;overflow:hidden}
@@ -726,6 +743,34 @@ export function docsHtml() {
       return '<div class="grid"><div><table><thead><tr><th>Content-Type</th><th>模型</th><th>必填</th></tr></thead><tbody><tr><td>application/json</td><td><code>' + escapeHtml(schemaLabel(body)) + '</code></td><td>' + (operation.requestBody.required ? "是" : "否") + '</td></tr></tbody></table></div><pre>' + escapeHtml(JSON.stringify(schemaExample(body), null, 2)) + '</pre></div>';
     }
 
+    function requestBodySchema(operation) {
+      return operation.requestBody?.content?.["application/json"]?.schema || null;
+    }
+
+    function sampleForInput(param) {
+      if (param.schema?.example !== undefined) return param.schema.example;
+      if (param.schema?.default !== undefined) return param.schema.default;
+      return "";
+    }
+
+    function renderDebug(item) {
+      const parameters = item.operation.parameters || [];
+      const body = requestBodySchema(item.operation);
+      const server = state.spec.servers?.[0]?.url || "";
+      const actionUrl = server + item.path;
+      const parameterFields = parameters.map((param) => {
+        return '<div class="field"><label><span>' + escapeHtml(param.name) + '</span><small>' + escapeHtml(param.in) + '</small>' + (param.required ? '<span class="required">*</span>' : "") + '</label>' +
+          '<input data-param-name="' + escapeHtml(param.name) + '" data-param-in="' + escapeHtml(param.in) + '" data-param-required="' + (param.required ? "true" : "false") + '" value="' + escapeHtml(sampleForInput(param)) + '" placeholder="' + escapeHtml(param.description || param.name) + '" /></div>';
+      }).join("");
+      const bodyField = body ? '<div class="field"><label><span>Request Body</span><small>application/json</small>' + (item.operation.requestBody?.required ? '<span class="required">*</span>' : "") + '</label><textarea data-debug-body>' + escapeHtml(JSON.stringify(schemaExample(body), null, 2)) + '</textarea></div>' : "";
+      return '<div class="debug-form">' +
+        (parameterFields ? '<div class="debug-grid">' + parameterFields + '</div>' : '<p class="desc">无可填写参数。</p>') +
+        bodyField +
+        '<div class="debug-actions"><button class="send-btn" type="button" data-send-debug>发送请求</button><span class="debug-url">' + escapeHtml(methodNames[item.method] + " " + actionUrl) + '</span></div>' +
+        '<div id="debug-response"><p class="desc">尚未发送请求。</p></div>' +
+        '</div>';
+    }
+
     function renderResponses(operation) {
       const responses = Object.entries(operation.responses || {});
       if (!responses.length) return '<p class="desc">暂无响应定义。</p>';
@@ -761,6 +806,7 @@ export function docsHtml() {
         '<div class="section-body"><p class="desc">' + escapeHtml(item.operation.description || "接口基础信息、请求参数和响应结构。") + '</p></div></section>' +
         '<section class="section"><div class="section-header"><span class="section-title">请求参数</span></div><div class="section-body">' + renderParameters(item.operation.parameters || []) + '</div></section>' +
         '<section class="section"><div class="section-header"><span class="section-title">请求体</span></div><div class="section-body">' + renderBody(item.operation) + '</div></section>' +
+        '<section class="section"><div class="section-header"><span class="section-title">在线调试</span></div><div class="section-body">' + renderDebug(item) + '</div></section>' +
         '<section class="section"><div class="section-header"><span class="section-title">响应</span></div><div class="section-body">' + renderResponses(item.operation) + '</div></section>' +
         '<section class="section"><div class="section-header"><span class="section-title">Curl</span><button class="copy-btn" type="button" data-copy="curl">复制</button></div><div class="section-body"><pre id="curl-block">' + escapeHtml(renderCurl(item)) + '</pre></div></section>';
     }
@@ -786,6 +832,94 @@ export function docsHtml() {
       setView(state.view);
     }
 
+    function currentOperation() {
+      return state.operations.find((operation) => operation.id === state.activeId);
+    }
+
+    function curlFromRequest(method, url, headers, body) {
+      const continuation = " " + String.fromCharCode(92, 10);
+      const lines = ["curl -X " + method + " '" + url + "'"];
+      Object.entries(headers).forEach(([name, value]) => {
+        lines.push("  -H '" + name + ": " + value.replaceAll("'", "'\\\\''") + "'");
+      });
+      if (body) lines.push("  -d '" + body.replaceAll("'", "'\\\\''") + "'");
+      return lines.join(continuation);
+    }
+
+    function buildDebugRequest(item) {
+      const server = state.spec.servers?.[0]?.url || "";
+      let path = (server.endsWith("/") ? server.slice(0, -1) : server) + item.path;
+      const query = [];
+      const headers = {};
+      document.querySelectorAll("[data-param-name]").forEach((input) => {
+        const name = input.dataset.paramName;
+        const location = input.dataset.paramIn;
+        const value = input.value.trim();
+        if (input.dataset.paramRequired === "true" && !value) throw new Error(name + " 为必填参数");
+        if (!value) return;
+        if (location === "path") path = path.split("{" + name + "}").join(encodeURIComponent(value));
+        if (location === "query") query.push([name, value]);
+        if (location === "header") headers[name] = value;
+      });
+      const url = new URL(path, window.location.origin);
+      query.forEach(([name, value]) => url.searchParams.append(name, value));
+      const token = document.getElementById("token").value.trim() || localStorage.getItem("daone-doc-token") || "";
+      if (token) headers.Authorization = "Bearer " + token;
+      const bodyControl = document.querySelector("[data-debug-body]");
+      let body = null;
+      if (bodyControl) {
+        const rawBody = bodyControl.value.trim();
+        if (rawBody) {
+          JSON.parse(rawBody);
+          body = rawBody;
+          if (!headers["Content-Type"]) headers["Content-Type"] = "application/json";
+        }
+      }
+      return {
+        method: methodNames[item.method],
+        url,
+        headers,
+        body
+      };
+    }
+
+    async function sendDebugRequest(button) {
+      const item = currentOperation();
+      const output = document.getElementById("debug-response");
+      if (!item || !output) return;
+      button.disabled = true;
+      button.textContent = "发送中...";
+      try {
+        const request = buildDebugRequest(item);
+        const startedAt = performance.now();
+        const response = await fetch(request.url.toString(), {
+          method: request.method,
+          headers: request.headers,
+          body: request.body
+        });
+        const elapsed = Math.round(performance.now() - startedAt);
+        const text = await response.text();
+        let bodyText = text;
+        try {
+          bodyText = JSON.stringify(JSON.parse(text), null, 2);
+        } catch {
+          bodyText = text;
+        }
+        const responseHeaders = Object.fromEntries(response.headers.entries());
+        const statusClass = response.ok ? "ok" : "fail";
+        output.innerHTML = '<div class="response-meta"><span class="badge ' + statusClass + '">' + response.status + " " + escapeHtml(response.statusText) + '</span><span class="badge">' + elapsed + ' ms</span><span class="badge">' + escapeHtml(request.method) + '</span></div>' +
+          '<pre>' + escapeHtml(bodyText || "(empty response)") + '</pre>' +
+          '<p class="desc">Response Headers</p><pre>' + escapeHtml(JSON.stringify(responseHeaders, null, 2)) + '</pre>';
+        const curlBlock = document.getElementById("curl-block");
+        if (curlBlock) curlBlock.textContent = curlFromRequest(request.method, request.url.pathname + request.url.search, request.headers, request.body);
+      } catch (error) {
+        output.innerHTML = '<div class="response-meta"><span class="badge fail">请求失败</span></div><pre>' + escapeHtml(error.message) + '</pre>';
+      } finally {
+        button.disabled = false;
+        button.textContent = "发送请求";
+      }
+    }
+
     document.addEventListener("click", async (event) => {
       const navItem = event.target.closest(".nav-item");
       if (navItem) {
@@ -799,6 +933,8 @@ export function docsHtml() {
       if (event.target.dataset.copy === "curl") {
         await navigator.clipboard?.writeText(document.getElementById("curl-block")?.textContent || "");
       }
+      const sendButton = event.target.closest("[data-send-debug]");
+      if (sendButton) await sendDebugRequest(sendButton);
     });
 
     document.getElementById("search").addEventListener("input", (event) => {

@@ -78,19 +78,22 @@ export async function createPayment(userId, orderNo, body) {
   order.status = "PAYING";
   order.updatedAt = new Date().toISOString();
   const channelPayment = await safeCreateChannelPayment(order, body.payType);
+  const transactionKey = `${orderNo}:${body.payType}`;
+  const existingTransaction = store.transactions.get(transactionKey);
+  const now = new Date().toISOString();
   const transaction = {
-    id: nextId(),
-    transactionNo: newOrderNo("PT"),
+    id: existingTransaction?.id || nextId(),
+    transactionNo: existingTransaction?.transactionNo || newOrderNo("PT"),
     orderNo,
     payType: body.payType,
-    channelTransactionNo: null,
+    channelTransactionNo: existingTransaction?.channelTransactionNo || null,
     status: "CREATED",
     qrCodeContent: channelPayment.qrCodeContent,
     redirectUrl: channelPayment.redirectUrl,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString()
+    createdAt: existingTransaction?.createdAt || now,
+    updatedAt: now
   };
-  store.transactions.set(`${orderNo}:${body.payType}`, transaction);
+  store.transactions.set(transactionKey, transaction);
   return {
     payType: transaction.payType,
     qrCodeContent: transaction.qrCodeContent,
