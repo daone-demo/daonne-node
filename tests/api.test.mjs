@@ -203,9 +203,28 @@ describe("Daone Vercel Node API", () => {
       phone: "13800138001",
       code: "123456"
     });
+    assert.equal(response.status, 400);
+    assert.equal(response.body.code, "SMS_CODE_INVALID");
+    assert.notEqual(secondUserId, firstUserId);
+
+    response = await request("POST", "/api/v1/auth/sms-codes", {
+      phone: "13800138009",
+      scene: "REGISTER"
+    });
     assert.equal(response.status, 200);
-    assert.equal(response.body.data.user.id, secondUserId);
-    assert.notEqual(response.body.data.user.id, firstUserId);
+
+    response = await request("POST", "/api/v1/auth/sms-login", {
+      phone: "13800138009",
+      code: "123456"
+    });
+    assert.equal(response.status, 200);
+
+    response = await request("POST", "/api/v1/auth/sms-login", {
+      phone: "13800138009",
+      code: "123456"
+    });
+    assert.equal(response.status, 400);
+    assert.equal(response.body.code, "SMS_CODE_INVALID");
 
     response = await request("GET", "/api/v1/home?categoryCode=BRAND", null, token);
     assert.equal(response.status, 200);

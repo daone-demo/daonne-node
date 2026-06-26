@@ -18,12 +18,18 @@ export async function sendSmsCode(phone, scene = "LOGIN") {
     sentAt: Date.now(),
     scene: normalizedScene
   };
+  const key = smsKey(normalizedPhone, normalizedScene);
   if (redisCacheEnabled()) {
-    await cacheSetJson(smsKey(normalizedPhone, normalizedScene), payload, appConfig.auth.smsCodeTtlSeconds);
+    await cacheSetJson(key, payload, appConfig.auth.smsCodeTtlSeconds);
   } else {
-    store.smsCodes.set(smsKey(normalizedPhone, normalizedScene), payload);
+    store.smsCodes.set(key, payload);
   }
-  await sendSms(normalizedPhone, code, normalizedScene);
+  try {
+    await sendSms(normalizedPhone, code, normalizedScene);
+  } catch (error) {
+    await deleteSmsCode(normalizedPhone, normalizedScene);
+    throw error;
+  }
   return { retryAfterSeconds: 60 };
 }
 
@@ -31,10 +37,7 @@ export async function loginBySms(phone, code) {
   const normalizedPhone = normalizePhone(phone);
   const normalizedCode = normalizeCode(code);
   assertPhone(normalizedPhone);
-  const cached = await getSmsCode(normalizedPhone, "LOGIN");
-  if (!cached || cached.expiresAt < Date.now() || cached.code !== normalizedCode) {
-    throw badRequest("SMS_CODE_INVALID", "验证码错误或已过期");
-  }
+  await assertSmsCode(normalizedPhone, normalizedCode, "LOGIN");
   const user = await ensureUserByPhone(normalizedPhone, { role: "USER" });
   if (user.status !== "ENABLED") {
     throw badRequest("USER_DISABLED", "账号已被禁用");
@@ -54,10 +57,7 @@ export async function loginAdminBySms(phone, code) {
   const normalizedCode = normalizeCode(code);
   assertPhone(normalizedPhone);
   await assertAdminPhone(normalizedPhone);
-  const cached = await getSmsCode(normalizedPhone, "ADMIN_LOGIN");
-  if (!cached || cached.expiresAt < Date.now() || cached.code !== normalizedCode) {
-    throw badRequest("SMS_CODE_INVALID", "验证码错误或已过期");
-  }
+  await assertSmsCode(normalizedPhone, normalizedCode, "ADMIN_LOGIN");
   const user = await ensureUserByPhone(normalizedPhone, { role: "ADMIN" });
   if (user.status !== "ENABLED") {
     throw badRequest("USER_DISABLED", "账号已被禁用");
@@ -128,10 +128,15 @@ export async function verifySmsCode(phone, code, scene) {
   const normalizedCode = normalizeCode(code);
   const normalizedScene = normalizeScene(scene);
   assertPhone(normalizedPhone);
-  const cached = await getSmsCode(normalizedPhone, normalizedScene);
+  await assertSmsCode(normalizedPhone, normalizedCode, normalizedScene);
+}
+
+async function assertSmsCode(phone, normalizedCode, scene) {
+  const cached = await getSmsCode(phone, scene);
   if (!cached || cached.expiresAt < Date.now() || cached.code !== normalizedCode) {
     throw badRequest("SMS_CODE_INVALID", "验证码错误或已过期");
   }
+  await deleteSmsCode(phone, scene);
 }
 
 export async function ensureUserByPhone(phone, defaults = {}) {
@@ -219,7 +224,7 @@ function normalizeCode(code) {
 
 function normalizeScene(scene = "LOGIN") {
   const value = String(scene || "LOGIN").trim().toUpperCase().replace(/[-\s]/g, "_");
-  if (["1", "LOGIN", "SMS_LOGIN", "AUTH_LOGIN"].includes(value)) return "LOGIN";
+  if (["1", "LOGIN", "SMS_LOGIN", "AUTH_LOGIN", "REGISTER", "REGISTRATION", "SIGNUP", "SIGN_UP"].includes(value)) return "LOGIN";
   if (["2", "TRIAL", "TRIAL_APPLICATION"].includes(value)) return "TRIAL";
   return value;
 }
@@ -277,6 +282,14 @@ async function getSmsCode(phone, scene) {
     return cacheGetJson(smsKey(phone, scene));
   }
   return store.smsCodes.get(smsKey(phone, scene));
+}
+
+async function deleteSmsCode(phone, scene) {
+  if (redisCacheEnabled()) {
+    await cacheDel(smsKey(phone, scene));
+  } else {
+    store.smsCodes.delete(smsKey(phone, scene));
+  }
 }
 
 function smsKey(phone, scene) {
