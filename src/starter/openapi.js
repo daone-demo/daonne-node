@@ -607,10 +607,6 @@ export function docsHtml() {
     .badge.ok{color:var(--green);border-color:#bbf7d0;background:#f0fdf4}
     .badge.fail{color:var(--red);border-color:#fecaca;background:#fef2f2}
     .empty{padding:36px;text-align:center;color:var(--muted)}
-    .schema-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
-    .schema-card{border:1px solid var(--line);border-radius:8px;background:#fff;overflow:hidden}
-    .schema-card h3{margin:0;padding:12px 14px;border-bottom:1px solid var(--line);font-size:15px;background:var(--panel-soft)}
-    .schema-card pre{border-radius:0;background:#0f172a}
     .hidden{display:none!important}
     @media (max-width:860px){
       .layout{grid-template-columns:1fr}
@@ -649,7 +645,6 @@ export function docsHtml() {
           </section>
           <div class="toolbar">
             <button class="tab active" data-view="docs">接口文档</button>
-            <button class="tab" data-view="schemas">数据模型</button>
             <div class="auth">
               <input id="token" type="password" placeholder="登录 Token，支持 Bearer xxx 或纯 token" />
               <button id="save-token" type="button">保存</button>
@@ -657,13 +652,12 @@ export function docsHtml() {
             </div>
           </div>
           <section id="docs-view"></section>
-          <section id="schemas-view" class="hidden"></section>
         </div>
       </main>
     </div>
   </div>
   <script>
-    const state = { spec: null, operations: [], activeId: "", query: "", view: "docs" };
+    const state = { spec: null, operations: [], activeId: "", query: "" };
     const methodOrder = ["get", "post", "put", "patch", "delete", "options", "head"];
     const methodNames = { get: "GET", post: "POST", put: "PUT", patch: "PATCH", delete: "DELETE", options: "OPTIONS", head: "HEAD" };
 
@@ -717,6 +711,20 @@ export function docsHtml() {
       if (schema.$ref) return schema.$ref.replace("#/components/schemas/", "");
       if (schema.type === "array") return "array<" + schemaLabel(schema.items) + ">";
       return schema.type || "object";
+    }
+
+    function schemaDescription(schema) {
+      if (!schema) return "";
+      if (schema.description) return schema.description;
+      if (schema.$ref) return resolveRef(schema.$ref)?.description || "";
+      return "";
+    }
+
+    function schemaExampleText(schema) {
+      if (!schema) return "";
+      if (schema.example !== undefined) return typeof schema.example === "object" ? JSON.stringify(schema.example) : String(schema.example);
+      if (schema.default !== undefined) return typeof schema.default === "object" ? JSON.stringify(schema.default) : String(schema.default);
+      return "";
     }
 
     function schemaExample(schema, seen = new Set()) {
@@ -775,6 +783,89 @@ export function docsHtml() {
       if (!parameters.length) return '<p class="desc">无请求参数。</p>';
       return '<table><thead><tr><th>名称</th><th>位置</th><th>必填</th><th>类型</th><th>说明</th></tr></thead><tbody>' +
         parameters.map((param) => '<tr><td><code>' + escapeHtml(param.name) + '</code></td><td>' + escapeHtml(param.in) + '</td><td>' + (param.required ? "是" : "否") + '</td><td>' + escapeHtml(schemaLabel(param.schema)) + '</td><td>' + escapeHtml(param.description || "") + '</td></tr>').join("") +
+        '</tbody></table>';
+    }
+
+    function collectSchemaFields(schema, options = {}) {
+      const rows = [];
+      const seen = options.seen || new Set();
+      const location = options.location || "body";
+      const prefix = options.prefix || "";
+      const resolved = schema?.$ref ? resolveRef(schema.$ref) : schema;
+      if (!resolved) return rows;
+      const schemaName = schema?.$ref ? schema.$ref.replace("#/components/schemas/", "") : "";
+      if (schemaName) {
+        if (seen.has(schemaName)) return rows;
+        seen.add(schemaName);
+      }
+      if (resolved.type === "array") {
+        rows.push({
+          key: prefix || "[]",
+          location,
+          required: options.required || false,
+          type: schemaLabel(resolved),
+          description: schemaDescription(resolved),
+          example: schemaExampleText(resolved)
+        });
+        rows.push(...collectSchemaFields(resolved.items, { location, prefix: (prefix || "items") + "[]", required: false, seen }));
+        return rows;
+      }
+      const properties = resolved.properties || {};
+      const required = new Set(resolved.required || []);
+      if (!Object.keys(properties).length) {
+        if (prefix) {
+          rows.push({
+            key: prefix,
+            location,
+            required: options.required || false,
+            type: schemaLabel(resolved),
+            description: schemaDescription(resolved),
+            example: schemaExampleText(resolved)
+          });
+        }
+        return rows;
+      }
+      Object.entries(properties).forEach(([key, child]) => {
+        const childKey = prefix ? prefix + "." + key : key;
+        const childResolved = child?.$ref ? resolveRef(child.$ref) : child;
+        rows.push({
+          key: childKey,
+          location,
+          required: required.has(key),
+          type: schemaLabel(child),
+          description: schemaDescription(child) || schemaDescription(childResolved),
+          example: schemaExampleText(child)
+        });
+        if (Object.keys(childResolved?.properties || {}).length || childResolved?.type === "array") {
+          rows.push(...collectSchemaFields(child, { location, prefix: childKey, required: false, seen: new Set(seen) }));
+        }
+      });
+      return rows;
+    }
+
+    function requestFieldRows(operation) {
+      const parameterRows = (operation.parameters || []).map((param) => ({
+        key: param.name,
+        location: param.in,
+        required: !!param.required,
+        type: schemaLabel(param.schema),
+        description: param.description || "",
+        example: schemaExampleText(param.schema)
+      }));
+      const body = requestBodySchema(operation);
+      return [...parameterRows, ...collectSchemaFields(body, { location: "body" })];
+    }
+
+    function responseFieldRows(operation) {
+      const response = operation.responses?.["200"] || Object.values(operation.responses || {})[0];
+      const schema = response?.content?.["application/json"]?.schema;
+      return collectSchemaFields(schema, { location: "response" });
+    }
+
+    function renderFieldTable(rows, emptyText, includeLocation = true) {
+      if (!rows.length) return '<p class="desc">' + escapeHtml(emptyText) + '</p>';
+      return '<table><thead><tr><th>字段 Key</th>' + (includeLocation ? '<th>位置</th>' : "") + '<th>类型</th><th>必填</th><th>含义</th><th>示例</th></tr></thead><tbody>' +
+        rows.map((row) => '<tr><td><code>' + escapeHtml(row.key) + '</code></td>' + (includeLocation ? '<td>' + escapeHtml(row.location) + '</td>' : "") + '<td>' + escapeHtml(row.type) + '</td><td>' + (row.required ? "是" : "否") + '</td><td>' + escapeHtml(row.description) + '</td><td>' + escapeHtml(row.example) + '</td></tr>').join("") +
         '</tbody></table>';
     }
 
@@ -847,30 +938,16 @@ export function docsHtml() {
         '<div class="section-body"><p class="desc">' + escapeHtml(item.operation.description || "接口基础信息、请求参数和响应结构。") + '</p></div></section>' +
         '<section class="section"><div class="section-header"><span class="section-title">请求参数</span></div><div class="section-body">' + renderParameters(item.operation.parameters || []) + '</div></section>' +
         '<section class="section"><div class="section-header"><span class="section-title">请求体</span></div><div class="section-body">' + renderBody(item.operation) + '</div></section>' +
+        '<section class="section"><div class="section-header"><span class="section-title">入参字段</span></div><div class="section-body">' + renderFieldTable(requestFieldRows(item.operation), "无入参字段。") + '</div></section>' +
+        '<section class="section"><div class="section-header"><span class="section-title">出参字段</span></div><div class="section-body">' + renderFieldTable(responseFieldRows(item.operation), "无出参字段。", false) + '</div></section>' +
         '<section class="section"><div class="section-header"><span class="section-title">在线调试</span></div><div class="section-body">' + renderDebug(item) + '</div></section>' +
         '<section class="section"><div class="section-header"><span class="section-title">响应</span></div><div class="section-body">' + renderResponses(item.operation) + '</div></section>' +
         '<section class="section"><div class="section-header"><span class="section-title">Curl</span><button class="copy-btn" type="button" data-copy="curl">复制</button></div><div class="section-body"><pre id="curl-block">' + escapeHtml(renderCurl(item)) + '</pre></div></section>';
     }
 
-    function renderSchemas() {
-      const schemas = state.spec.components?.schemas || {};
-      document.getElementById("schemas-view").innerHTML = '<div class="schema-list">' + Object.entries(schemas).map(([name, schema]) => {
-        return '<article class="schema-card"><h3>' + escapeHtml(name) + '</h3><pre>' + escapeHtml(JSON.stringify(schema, null, 2)) + '</pre></article>';
-      }).join("") + '</div>';
-    }
-
-    function setView(view) {
-      state.view = view;
-      document.querySelectorAll(".tab").forEach((button) => button.classList.toggle("active", button.dataset.view === view));
-      document.getElementById("docs-view").classList.toggle("hidden", view !== "docs");
-      document.getElementById("schemas-view").classList.toggle("hidden", view !== "schemas");
-    }
-
     function renderAll() {
       renderNav();
       renderDocs();
-      renderSchemas();
-      setView(state.view);
     }
 
     function currentOperation() {
@@ -969,8 +1046,6 @@ export function docsHtml() {
         document.querySelector(".main").scrollTop = 0;
         return;
       }
-      const tab = event.target.closest(".tab");
-      if (tab) setView(tab.dataset.view);
       if (event.target.dataset.copy === "curl") {
         await navigator.clipboard?.writeText(document.getElementById("curl-block")?.textContent || "");
       }
