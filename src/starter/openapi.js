@@ -740,10 +740,14 @@ export function docsHtml() {
     function renderCurl(item) {
       const server = state.spec.servers?.[0]?.url || "";
       const token = localStorage.getItem("daone-doc-token") || "";
+      const continuation = " " + String.fromCharCode(92, 10);
       const lines = ["curl -X " + methodNames[item.method] + " '" + server + item.path + "'"];
       if (token) lines.push("  -H 'Authorization: Bearer " + token + "'");
-      if (item.operation.requestBody) lines.push("  -H 'Content-Type: application/json' \\\\n  -d '" + JSON.stringify(schemaExample(item.operation.requestBody.content?.["application/json"]?.schema)) + "'");
-      return lines.join(" \\\\n");
+      if (item.operation.requestBody) {
+        lines.push("  -H 'Content-Type: application/json'");
+        lines.push("  -d '" + JSON.stringify(schemaExample(item.operation.requestBody.content?.["application/json"]?.schema)) + "'");
+      }
+      return lines.join(continuation);
     }
 
     function renderDocs() {
