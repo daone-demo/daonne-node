@@ -8,6 +8,7 @@ export function getProfile(userId) {
   }
   const points = store.pointAccounts.get(userId) || { availablePoints: 0, frozenPoints: 0, grantedTotal: 0 };
   const subscription = store.subscriptions.get(userId) || null;
+  const vipName = resolveVipName(subscription);
   return {
     id: user.id,
     nickname: user.nickname,
@@ -16,6 +17,7 @@ export function getProfile(userId) {
     email: user.email,
     gender: user.gender,
     birthday: user.birthday,
+    vipName,
     subscription,
     points: {
       available: points.availablePoints,
@@ -81,4 +83,12 @@ function maskPhone(phone) {
     return phone;
   }
   return `${phone.slice(0, 3)}****${phone.slice(-4)}`;
+}
+
+function resolveVipName(subscription) {
+  if (!subscription) {
+    return null;
+  }
+  const plan = [...store.plans.values()].find((item) => item.planCode === subscription.planCode && !item.deleted);
+  return plan?.planName || subscription.planName || null;
 }

@@ -631,6 +631,11 @@ describe("Daone Vercel Node API", () => {
     assert.equal(response.status, 200);
     assert.equal(response.body.data.status, "PAID");
 
+    response = await request("GET", "/api/v1/users/me", null, token);
+    assert.equal(response.status, 200);
+    assert.equal(response.body.data.vipName, "团队协作版");
+    assert.equal(response.body.data.subscription.planName, "团队协作版");
+
     response = await request("POST", "/api/v1/orders", {
       orderType: "PLAN",
       productCode: "TEAM_MONTH"
