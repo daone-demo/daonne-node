@@ -278,6 +278,30 @@ async function mirrorProjects(client) {
     );
   }
 
+  for (const group of store.canvasElementGroups.values()) {
+    await client.query(
+      `INSERT INTO canvas_element_group (id, user_id, project_id, name, description, structure_json, deleted, created_at, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       ON CONFLICT (id) DO UPDATE SET
+         name = EXCLUDED.name,
+         description = EXCLUDED.description,
+         structure_json = EXCLUDED.structure_json,
+         deleted = EXCLUDED.deleted,
+         updated_at = EXCLUDED.updated_at`,
+      [
+        toBigInt(group.id),
+        toBigInt(group.userId),
+        toBigInt(group.projectId),
+        group.name,
+        nullable(group.description),
+        json(group.structure || {}),
+        boolean(group.deleted),
+        timestamp(group.createdAt),
+        timestamp(group.updatedAt || group.createdAt)
+      ]
+    );
+  }
+
   for (const version of store.versions.values()) {
     await client.query(
       `INSERT INTO project_version (id, project_id, version_no, canvas_json, created_at)

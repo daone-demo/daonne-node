@@ -40,6 +40,20 @@ CREATE TABLE project_canvas (
     updated_at TIMESTAMP NOT NULL
 );
 
+CREATE TABLE canvas_element_group (
+    id BIGINT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    project_id BIGINT NOT NULL,
+    name VARCHAR(128) NOT NULL,
+    description VARCHAR(500),
+    structure_json TEXT NOT NULL,
+    deleted SMALLINT NOT NULL DEFAULT 0,
+    created_at TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP NOT NULL
+);
+CREATE INDEX idx_canvas_element_group_project ON canvas_element_group(project_id, deleted, updated_at);
+CREATE INDEX idx_canvas_element_group_user ON canvas_element_group(user_id, updated_at);
+
 CREATE TABLE project_version (
     id BIGINT PRIMARY KEY,
     project_id BIGINT NOT NULL,

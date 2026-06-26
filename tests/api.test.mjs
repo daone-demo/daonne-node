@@ -216,6 +216,38 @@ describe("Daone Vercel Node API", () => {
     assert.equal(response.body.data.canvasData.version, 1);
     assert.ok(Array.isArray(response.body.data.canvasData.graph.cells));
 
+    response = await request("POST", `/api/v1/projects/${projectId}/element-groups`, {
+      projectName: "商品主视觉元素组",
+      projectDescription: "商品图、标题文本和价格标签组成的一组元素",
+      projectStructure: {
+        cells: [
+          { id: "product-image", shape: "image", x: 120, y: 80 },
+          { id: "price-label", shape: "text", text: "限时优惠" }
+        ]
+      }
+    }, token);
+    assert.equal(response.status, 200);
+    const elementGroupId = response.body.data.id;
+    assert.ok(elementGroupId);
+    assert.equal(response.body.data.projectId, projectId);
+    assert.equal(response.body.data.projectName, "商品主视觉元素组");
+    assert.equal(response.body.data.projectDescription, "商品图、标题文本和价格标签组成的一组元素");
+    assert.equal(response.body.data.projectStructure.cells.length, 2);
+
+    response = await request("GET", `/api/v1/projects/${projectId}/element-groups`, null, token);
+    assert.equal(response.status, 200);
+    assert.equal(response.body.data.records.length, 1);
+    assert.equal(response.body.data.records[0].id, elementGroupId);
+    assert.equal(response.body.data.records[0].projectName, "商品主视觉元素组");
+    assert.equal(response.body.data.records[0].projectStructure.cells.length, 2);
+
+    response = await request("POST", `/api/v1/projects/${projectId}/element-groups`, {
+      projectName: "结构错误",
+      projectStructure: []
+    }, token);
+    assert.equal(response.status, 400);
+    assert.equal(response.body.code, "PARAM_INVALID");
+
     response = await request("PUT", `/api/v1/projects/${projectId}/canvas`, {
       revision: 0,
       canvasData: {
@@ -245,8 +277,43 @@ describe("Daone Vercel Node API", () => {
     assert.equal(response.status, 200);
     assert.equal(response.body.data.uploadUrl, "/api/mock-files/upload");
     const uploadTicket = response.body.data.uploadTicket;
+    const objectKey = response.body.data.objectKey;
 
-    response = await request("GET", `/api/mock-files/${response.body.data.objectKey}`);
+    response = await request("POST", "/api/v1/assets/upload-tickets", {
+      projectId,
+      fileName: "large-cover.png",
+      contentType: "image/png",
+      fileSize: 10 * 1024 * 1024
+    }, token);
+    assert.equal(response.status, 200);
+
+    response = await request("POST", "/api/v1/assets/upload-tickets", {
+      projectId,
+      fileName: "too-large-cover.png",
+      contentType: "image/png",
+      fileSize: 10 * 1024 * 1024 + 1
+    }, token);
+    assert.equal(response.status, 400);
+    assert.equal(response.body.code, "FILE_SIZE_TOO_LARGE");
+
+    response = await request("POST", "/api/v1/assets/upload-tickets", {
+      projectId,
+      fileName: "large-demo.mp4",
+      contentType: "video/mp4",
+      fileSize: 50 * 1024 * 1024
+    }, token);
+    assert.equal(response.status, 200);
+
+    response = await request("POST", "/api/v1/assets/upload-tickets", {
+      projectId,
+      fileName: "too-large-demo.mp4",
+      contentType: "video/mp4",
+      fileSize: 50 * 1024 * 1024 + 1
+    }, token);
+    assert.equal(response.status, 400);
+    assert.equal(response.body.code, "FILE_SIZE_TOO_LARGE");
+
+    response = await request("GET", `/api/mock-files/${objectKey}`);
     assert.equal(response.status, 200);
     assert.match(response.rawBody, /Daone Mock File/);
 

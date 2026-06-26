@@ -8,6 +8,7 @@ import * as userService from "../service/user/userService.js";
 import * as projectService from "../service/creation/projectService.js";
 import * as shareService from "../service/creation/shareService.js";
 import * as assetService from "../service/creation/assetService.js";
+import * as canvasElementGroupService from "../service/creation/canvasElementGroupService.js";
 import * as aiService from "../service/creation/aiService.js";
 import * as chatService from "../service/creation/chatService.js";
 import * as workflowService from "../service/creation/workflowService.js";
@@ -50,6 +51,8 @@ router.delete("/api/v1/projects/:projectId", async ({ user, params }) => {
 });
 router.get("/api/v1/projects/:projectId/canvas", async ({ user, params }) => projectService.getCanvas(user.id, params.projectId));
 router.put("/api/v1/projects/:projectId/canvas", async ({ user, params, body }) => projectService.saveCanvas(user.id, params.projectId, body));
+router.post("/api/v1/projects/:projectId/element-groups", async ({ user, params, body }) => canvasElementGroupService.createCanvasElementGroup(user.id, params.projectId, body));
+router.get("/api/v1/projects/:projectId/element-groups", async ({ user, params, url }) => page(canvasElementGroupService.listCanvasElementGroups(user.id, params.projectId), url));
 router.get("/api/v1/projects/:projectId/versions", async ({ user, params, url }) => page(projectService.listVersions(user.id, params.projectId), url));
 router.get("/api/v1/projects/:projectId/versions/:versionId", async ({ user, params }) => projectService.getVersion(user.id, params.projectId, params.versionId));
 router.post("/api/v1/projects/:projectId/versions/:versionId/restore", async ({ user, params }) => projectService.restoreVersion(user.id, params.projectId, params.versionId));

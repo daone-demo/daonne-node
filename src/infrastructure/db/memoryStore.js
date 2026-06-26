@@ -155,6 +155,7 @@ export const store = globalThis.__DAONE_STORE__ ?? {
   tokens: new Map(),
   projects: new Map(),
   canvases: new Map(),
+  canvasElementGroups: new Map(),
   versions: new Map(),
   shares: new Map(),
   assets: new Map(),
@@ -231,6 +232,7 @@ export function importStoreSnapshot(snapshot) {
 const ID_MAP_KEYS = [
   "users",
   "projects",
+  "canvasElementGroups",
   "versions",
   "shares",
   "assets",

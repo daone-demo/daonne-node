@@ -6,11 +6,18 @@ import { badGateway, badRequest, forbidden, notFound } from "../common/errors.js
 import { requireProject } from "./projectService.js";
 import { reviewAsset } from "../../infrastructure/middleware/contentSafetyClient.js";
 
+const MIB = 1024 * 1024;
+const UPLOAD_SIZE_LIMITS = {
+  IMAGE: 10 * MIB,
+  VIDEO: 50 * MIB
+};
+
 export function createUploadTicket(userId, body) {
   if (!body.fileName || !body.contentType || !body.fileSize) {
     throw badRequest("PARAM_INVALID", "fileName、contentType、fileSize 不能为空");
   }
   const type = mediaType(body.contentType);
+  const fileSize = validateFileSize(body.fileSize, type);
   if (body.projectId) {
     requireProject(userId, body.projectId);
   }
@@ -23,7 +30,7 @@ export function createUploadTicket(userId, body) {
     projectId: body.projectId ? String(body.projectId) : null,
     fileName: body.fileName,
     contentType: body.contentType,
-    fileSize: Number(body.fileSize),
+    fileSize,
     type,
     objectKey,
     expiresAt
@@ -159,6 +166,18 @@ function mediaType(contentType) {
   if (contentType.startsWith("image/")) return "IMAGE";
   if (contentType.startsWith("video/")) return "VIDEO";
   throw badRequest("FILE_TYPE_NOT_SUPPORTED", "仅支持图片和视频");
+}
+
+function validateFileSize(value, type) {
+  const fileSize = Number(value);
+  if (!Number.isFinite(fileSize) || fileSize <= 0) {
+    throw badRequest("PARAM_INVALID", "fileSize 必须为大于 0 的数字");
+  }
+  const maxSize = UPLOAD_SIZE_LIMITS[type];
+  if (fileSize > maxSize) {
+    throw badRequest("FILE_SIZE_TOO_LARGE", `${type === "IMAGE" ? "图片" : "视频"}文件大小不能超过 ${maxSize / MIB}M`);
+  }
+  return fileSize;
 }
 
 async function safeReviewAsset(asset) {

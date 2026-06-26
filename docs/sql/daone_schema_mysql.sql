@@ -49,6 +49,21 @@ CREATE TABLE IF NOT EXISTS project_canvas (
     PRIMARY KEY (project_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+CREATE TABLE IF NOT EXISTS canvas_element_group (
+    id BIGINT NOT NULL,
+    user_id BIGINT NOT NULL,
+    project_id BIGINT NOT NULL,
+    name VARCHAR(128) NOT NULL,
+    description VARCHAR(500) NULL,
+    structure_json LONGTEXT NOT NULL,
+    deleted TINYINT NOT NULL DEFAULT 0,
+    created_at DATETIME(3) NOT NULL,
+    updated_at DATETIME(3) NOT NULL,
+    PRIMARY KEY (id),
+    KEY idx_canvas_element_group_project (project_id, deleted, updated_at),
+    KEY idx_canvas_element_group_user (user_id, updated_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
 CREATE TABLE IF NOT EXISTS project_version (
     id BIGINT NOT NULL,
     project_id BIGINT NOT NULL,

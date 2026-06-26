@@ -83,6 +83,13 @@ export function openApiSpec() {
             }, "画布摘要")
           }, "画布快照 JSON 数据")
         }, "保存画布请求", ["revision", "canvasData"]),
+        CanvasElementGroupSaveRequest: object({
+          projectName: string("商品主视觉元素组", "元素组名称"),
+          projectDescription: string("商品图、标题文本和价格标签组成的一组元素", "元素组描述"),
+          projectStructure: object({
+            cells: array(object({}, "选中的节点/连线"))
+          }, "画布元素组结构 JSON")
+        }, "保存画布元素组请求", ["projectName", "projectStructure"]),
         ShareCreateRequest: object({
           expireDays: integer(7, "有效天数")
         }, "创建分享请求"),
@@ -90,7 +97,7 @@ export function openApiSpec() {
           projectId: string("100000000000000001", "项目 ID，可选"),
           fileName: string("cover.png", "文件名"),
           contentType: string("image/png", "文件 MIME 类型"),
-          fileSize: integer(128, "文件大小，单位字节")
+          fileSize: integer(128, "文件大小，单位字节；图片最大 10M，视频最大 50M")
         }, "获取上传凭证请求", ["fileName", "contentType", "fileSize"]),
         AssetCompleteUploadRequest: object({
           uploadTicket: string("upt_xxx", "上传凭证"),
@@ -275,6 +282,7 @@ export function openApiSpec() {
       "/v1/projects": { get: op("项目列表", { query: [queryParam("keyword", "项目关键词"), ...pageParams()] }), post: op("创建项目", { body: "ProjectCreateRequest" }) },
       "/v1/projects/{projectId}": { get: op("项目详情", { params: [projectIdParam()] }), patch: op("修改项目", { params: [projectIdParam()], body: "ProjectUpdateRequest" }), delete: op("删除项目", { params: [projectIdParam()] }) },
       "/v1/projects/{projectId}/canvas": { get: op("画布详情", { params: [projectIdParam()] }), put: op("保存画布", { params: [projectIdParam()], body: "CanvasSaveRequest" }) },
+      "/v1/projects/{projectId}/element-groups": { get: op("画布元素组列表", { params: [projectIdParam()], query: pageParams() }), post: op("保存画布元素组", { params: [projectIdParam()], body: "CanvasElementGroupSaveRequest" }) },
       "/v1/projects/{projectId}/versions": { get: op("历史版本列表", { params: [projectIdParam()], query: pageParams() }) },
       "/v1/projects/{projectId}/versions/{versionId}": { get: op("历史版本详情", { params: [projectIdParam(), pathParam("versionId", "历史版本 ID")] }) },
       "/v1/projects/{projectId}/versions/{versionId}/restore": { post: op("恢复历史版本", { params: [projectIdParam(), pathParam("versionId", "历史版本 ID")] }) },
