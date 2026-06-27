@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { appConfig } from "../config/env.js";
 import { createLogger } from "../common/logger.js";
+import { badGateway } from "../../service/common/errors.js";
 
 const smsProviderLog = createLogger("sms_provider");
 
@@ -23,6 +24,7 @@ export async function sendSms(phone, code, scene = "LOGIN") {
     signNameLength: appConfig.sms.signName.length,
     templateCode: appConfig.sms.templateCode || null
   });
+  assertSmsProviderConfigured();
   const params = {
     AccessKeyId: appConfig.aliyun.accessKeyId,
     Action: "SendSms",
@@ -57,7 +59,9 @@ export async function sendSms(phone, code, scene = "LOGIN") {
       errorName: error.name,
       errorMessage: error.message
     }, "error");
-    throw error;
+    throw badGateway("SMS_PROVIDER_NETWORK_ERROR", "短信服务网络异常", {
+      reason: error.message
+    });
   }
   logSmsProvider("sms_provider_aliyun_response", {
     phone: maskPhone(phone),
@@ -69,13 +73,25 @@ export async function sendSms(phone, code, scene = "LOGIN") {
     aliyunBizId: result.BizId
   }, response.ok && result.Code === "OK" ? "info" : "error");
   if (!response.ok || result.Code !== "OK") {
-    const error = new Error(`Aliyun SMS failed: ${result.Code || response.status}`);
-    error.providerCode = result.Code;
-    error.providerMessage = result.Message;
-    error.providerRequestId = result.RequestId;
-    throw error;
+    throw badGateway("SMS_PROVIDER_ERROR", "短信服务发送失败", {
+      status: response.status,
+      providerCode: result.Code,
+      providerMessage: result.Message,
+      providerRequestId: result.RequestId
+    });
   }
   return result;
+}
+
+function assertSmsProviderConfigured() {
+  const missing = [];
+  if (!appConfig.aliyun.accessKeyId) missing.push("ALIYUN_ACCESS_KEY_ID");
+  if (!appConfig.aliyun.accessKeySecret) missing.push("ALIYUN_ACCESS_KEY_SECRET");
+  if (!appConfig.sms.signName) missing.push("SMS_SIGN_NAME");
+  if (!appConfig.sms.templateCode) missing.push("SMS_TEMPLATE_CODE");
+  if (missing.length) {
+    throw badGateway("SMS_PROVIDER_NOT_CONFIGURED", "短信服务未配置完整", { missing });
+  }
 }
 
 function canonicalQuery(params) {
