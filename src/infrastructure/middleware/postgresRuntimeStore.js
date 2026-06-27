@@ -122,6 +122,55 @@ export async function findPostgresUserByPhone(phone) {
   return rows[0] ? mapUserRow(rows[0]) : null;
 }
 
+export async function findPostgresUserById(userId) {
+  if (!postgresRuntimeStoreEnabled()) {
+    return null;
+  }
+  await ensureRuntimeTable();
+  const { rows } = await getPool().query(
+    `SELECT id, phone, nickname, avatar_url, email, gender, birthday, status, role, created_at, updated_at
+       FROM user_account
+      WHERE id = $1
+      LIMIT 1`,
+    [userId]
+  );
+  return rows[0] ? mapUserRow(rows[0]) : null;
+}
+
+export async function updatePostgresUserProfile(userId, fields) {
+  if (!postgresRuntimeStoreEnabled()) {
+    return null;
+  }
+  const updates = [];
+  const values = [];
+  const columnMap = {
+    nickname: "nickname",
+    avatarUrl: "avatar_url",
+    email: "email",
+    gender: "gender",
+    birthday: "birthday"
+  };
+  for (const [key, column] of Object.entries(columnMap)) {
+    if (fields[key] !== undefined) {
+      values.push(fields[key]);
+      updates.push(`${column} = $${values.length}`);
+    }
+  }
+  if (!updates.length) {
+    return findPostgresUserById(userId);
+  }
+  values.push(userId);
+  await ensureRuntimeTable();
+  const { rows } = await getPool().query(
+    `UPDATE user_account
+        SET ${updates.join(", ")}, updated_at = NOW()
+      WHERE id = $${values.length}
+      RETURNING id, phone, nickname, avatar_url, email, gender, birthday, status, role, created_at, updated_at`,
+    values
+  );
+  return rows[0] ? mapUserRow(rows[0]) : null;
+}
+
 async function ensureRuntimeTable() {
   if (initialized) {
     return;
