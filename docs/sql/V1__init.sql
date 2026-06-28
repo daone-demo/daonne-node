@@ -1,9 +1,3 @@
-CREATE TABLE daone_runtime_store (
-    store_key VARCHAR(64) PRIMARY KEY,
-    store_value CLOB NOT NULL,
-    updated_at TIMESTAMP NOT NULL
-);
-
 CREATE TABLE user_account (
     id BIGINT PRIMARY KEY,
     phone VARCHAR(20),
@@ -70,6 +64,8 @@ CREATE TABLE project_share (
     status VARCHAR(16) NOT NULL,
     expire_at TIMESTAMP NOT NULL,
     created_at TIMESTAMP NOT NULL,
+    title VARCHAR(128),
+    updated_at TIMESTAMP,
     CONSTRAINT uk_project_share_code UNIQUE (share_code)
 );
 CREATE INDEX idx_project_share_project ON project_share(project_id, status);
@@ -90,7 +86,9 @@ CREATE TABLE asset (
     review_status VARCHAR(16) NOT NULL,
     deleted TINYINT NOT NULL DEFAULT 0,
     created_at TIMESTAMP NOT NULL,
-    updated_at TIMESTAMP NOT NULL
+    updated_at TIMESTAMP NOT NULL,
+    preview_url VARCHAR(1000),
+    tags_json CLOB
 );
 CREATE INDEX idx_asset_user_created ON asset(user_id, created_at);
 
@@ -121,7 +119,8 @@ CREATE TABLE generation_task (
     error_code VARCHAR(64),
     error_message VARCHAR(500),
     created_at TIMESTAMP NOT NULL,
-    updated_at TIMESTAMP NOT NULL
+    updated_at TIMESTAMP NOT NULL,
+    results_json CLOB
 );
 CREATE INDEX idx_task_user_status_created ON generation_task(user_id, status, created_at);
 CREATE UNIQUE INDEX uk_generation_idempotency ON generation_task(user_id, idempotency_key);

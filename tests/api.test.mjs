@@ -153,6 +153,23 @@ describe("Daone Vercel Node API", () => {
     assert.equal(response.body.data.dataSourceType, "memory");
     assert.equal(response.body.data.mocks.storage, true);
 
+    const originalAllowedOrigins = appConfig.cors.allowedOrigins;
+    try {
+      appConfig.cors.allowedOrigins = ["https://www.daoneai.com", "https://admin.daoneai.com"];
+      response = await request("GET", "/api/health", null, null, {
+        origin: "https://admin.daoneai.com"
+      });
+      assert.equal(response.headers["access-control-allow-origin"], "https://admin.daoneai.com");
+      assert.equal(response.headers.vary, "Origin");
+
+      response = await request("GET", "/api/health", null, null, {
+        origin: "https://evil.example"
+      });
+      assert.equal(response.headers["access-control-allow-origin"], undefined);
+    } finally {
+      appConfig.cors.allowedOrigins = originalAllowedOrigins;
+    }
+
     response = await request("POST", "/api/admin/v1/sms-codes", {
       phone: "13800138000",
       scene: "LOGIN"
@@ -606,6 +623,11 @@ describe("Daone Vercel Node API", () => {
     assert.ok(response.body.data.items.length >= 9);
     assert.ok(response.body.data.items.some((item) => item.code === "ENTERPRISE_TWO_YEARS"));
     assert.ok(response.body.data.items.some((item) => item.code === "TRIAL_5D"));
+    const testPayPlan = response.body.data.items.find((item) => item.code === "TEST_PAY_1FEN");
+    assert.ok(testPayPlan);
+    assert.equal(testPayPlan.name, "支付测试套餐");
+    assert.equal(testPayPlan.priceFen, 1);
+    assert.equal(testPayPlan.grantPoints, 1);
 
     response = await request("GET", "/api/v1/plans");
     assert.equal(response.status, 200);
@@ -624,6 +646,13 @@ describe("Daone Vercel Node API", () => {
     }, null, { "Idempotency-Key": "trial-1" });
     assert.equal(response.status, 200);
     assert.equal(response.body.data.amountFen, 9900);
+
+    response = await request("POST", "/api/v1/orders", {
+      orderType: "PLAN",
+      productCode: "TEST_PAY_1FEN"
+    }, token, { "Idempotency-Key": "test-pay-order-1" });
+    assert.equal(response.status, 200);
+    assert.equal(response.body.data.amountFen, 1);
 
     response = await request("POST", "/api/v1/orders", {
       orderType: "PLAN",
@@ -975,6 +1004,55 @@ describe("Daone Vercel Node API", () => {
     response = await request("POST", "/api/v1/projects", { title: "项目 D" }, token);
     assert.equal(response.status, 200);
     assert.ok(BigInt(response.body.data.id) > thirdProjectId);
+  });
+
+  it("seeds the 1-fen payment test plan without reusing occupied ids", async () => {
+    const { exportStoreSnapshot, importStoreSnapshot, store } = await import("../src/infrastructure/db/memoryStore.js");
+    const snapshot = exportStoreSnapshot();
+    const collisionSnapshot = structuredClone(snapshot);
+    const now = new Date().toISOString();
+
+    collisionSnapshot.plans.entries = collisionSnapshot.plans.entries
+      .filter(([, plan]) => plan.planCode !== "TEST_PAY");
+    collisionSnapshot.prices.entries = collisionSnapshot.prices.entries
+      .filter(([priceCode]) => priceCode !== "TEST_PAY_1FEN");
+    collisionSnapshot.plans.entries.push(["1006", {
+      id: "1006",
+      planCode: "LEGACY_MANUAL",
+      planName: "历史手动套餐",
+      description: "占用测试套餐默认 ID",
+      benefits: [],
+      status: "ENABLED",
+      createdAt: now,
+      updatedAt: now
+    }]);
+    collisionSnapshot.prices.entries.push(["LEGACY_MANUAL_1D", {
+      id: "1110",
+      planId: "1006",
+      priceCode: "LEGACY_MANUAL_1D",
+      cycleUnit: "DAY",
+      cycleCount: 1,
+      priceFen: 100,
+      originalPriceFen: null,
+      grantPoints: 0,
+      status: "ENABLED",
+      createdAt: now,
+      updatedAt: now
+    }]);
+
+    try {
+      importStoreSnapshot(collisionSnapshot);
+      const testPlan = [...store.plans.values()].find((item) => item.planCode === "TEST_PAY");
+      const testPrice = store.prices.get("TEST_PAY_1FEN");
+      assert.ok(testPlan);
+      assert.ok(testPrice);
+      assert.notEqual(testPlan.id, "1006");
+      assert.notEqual(testPrice.id, "1110");
+      assert.equal(testPrice.planId, testPlan.id);
+      assert.equal(testPrice.priceFen, 1);
+    } finally {
+      importStoreSnapshot(snapshot);
+    }
   });
 
   it("keeps project id stable when patching title and canvas meta", async () => {

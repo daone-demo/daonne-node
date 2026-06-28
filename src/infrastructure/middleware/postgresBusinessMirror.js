@@ -6,33 +6,27 @@ const runtimeStoreLog = createLogger("runtime_store");
 export async function mirrorPostgresBusinessTables(pool) {
   const client = await pool.connect();
   try {
-    await mirrorStep(client, "users", mirrorUsers);
-    await mirrorStep(client, "plans", mirrorPlans);
-    await mirrorStep(client, "models", mirrorModels);
-    await mirrorStep(client, "inspirations", mirrorInspirations);
-    await mirrorStep(client, "projects", mirrorProjects);
-    await mirrorStep(client, "assets", mirrorAssets);
-    await mirrorStep(client, "ai", mirrorAi);
-    await mirrorStep(client, "chat", mirrorChat);
-    await mirrorStep(client, "workflows", mirrorWorkflows);
-    await mirrorStep(client, "billing", mirrorBilling);
-    await mirrorStep(client, "adminContent", mirrorAdminContent);
-  } finally {
-    client.release();
-  }
-}
-
-async function mirrorStep(client, name, mirror) {
-  try {
     await client.query("BEGIN");
-    await mirror(client);
+    await mirrorUsers(client);
+    await mirrorPlans(client);
+    await mirrorModels(client);
+    await mirrorInspirations(client);
+    await mirrorProjects(client);
+    await mirrorAssets(client);
+    await mirrorAi(client);
+    await mirrorChat(client);
+    await mirrorWorkflows(client);
+    await mirrorBilling(client);
+    await mirrorAdminContent(client);
     await client.query("COMMIT");
   } catch (error) {
     await client.query("ROLLBACK");
-    runtimeStoreLog.warn("postgres_business_mirror.step_failed", "Postgres business table mirror step failed", {
-      step: name,
+    runtimeStoreLog.error("postgres_business_mirror.failed", "Postgres business table mirror failed", {
       ...errorFields(error)
     });
+    throw error;
+  } finally {
+    client.release();
   }
 }
 
@@ -51,7 +45,8 @@ async function mirrorUsers(client) {
          birthday = EXCLUDED.birthday,
          status = EXCLUDED.status,
          role = EXCLUDED.role,
-         updated_at = EXCLUDED.updated_at`,
+         updated_at = EXCLUDED.updated_at
+       WHERE user_account.updated_at <= EXCLUDED.updated_at`,
       [
         toBigInt(user.id),
         nullable(user.phone),
@@ -78,7 +73,8 @@ async function mirrorUsers(client) {
          frozen_points = EXCLUDED.frozen_points,
          granted_total = EXCLUDED.granted_total,
          version = EXCLUDED.version,
-         updated_at = EXCLUDED.updated_at`,
+         updated_at = EXCLUDED.updated_at
+       WHERE point_account.updated_at <= EXCLUDED.updated_at`,
       [
         toBigInt(account.userId),
         number(account.availablePoints),
@@ -126,7 +122,8 @@ async function mirrorPlans(client) {
          status = EXCLUDED.status,
          updated_at = EXCLUDED.updated_at,
          deleted = EXCLUDED.deleted,
-         attributes = EXCLUDED.attributes`,
+         attributes = EXCLUDED.attributes
+       WHERE subscription_plan.updated_at <= EXCLUDED.updated_at`,
       [
         toBigInt(plan.id),
         plan.planCode,
@@ -155,7 +152,8 @@ async function mirrorPlans(client) {
          original_price_fen = EXCLUDED.original_price_fen,
          grant_points = EXCLUDED.grant_points,
          status = EXCLUDED.status,
-         updated_at = EXCLUDED.updated_at`,
+         updated_at = EXCLUDED.updated_at
+       WHERE subscription_plan_price.updated_at <= EXCLUDED.updated_at`,
       [
         toBigInt(price.id),
         toBigInt(price.planId),
@@ -187,7 +185,8 @@ async function mirrorModels(client) {
          status = EXCLUDED.status,
          updated_at = EXCLUDED.updated_at,
          deleted = EXCLUDED.deleted,
-         attributes = EXCLUDED.attributes`,
+         attributes = EXCLUDED.attributes
+       WHERE model_config.updated_at <= EXCLUDED.updated_at`,
       [
         toBigInt(model.id),
         model.modelCode,
@@ -223,7 +222,8 @@ async function mirrorInspirations(client) {
          updated_at = EXCLUDED.updated_at,
          prompt = EXCLUDED.prompt,
          deleted = EXCLUDED.deleted,
-         attributes = EXCLUDED.attributes`,
+         attributes = EXCLUDED.attributes
+       WHERE inspiration.updated_at <= EXCLUDED.updated_at`,
       [
         toBigInt(item.id),
         item.title,
@@ -254,7 +254,8 @@ async function mirrorProjects(client) {
          title = EXCLUDED.title,
          cover_asset_id = EXCLUDED.cover_asset_id,
          status = EXCLUDED.status,
-         updated_at = EXCLUDED.updated_at`,
+         updated_at = EXCLUDED.updated_at
+       WHERE project.updated_at <= EXCLUDED.updated_at`,
       [
         toBigInt(project.id),
         toBigInt(project.userId),
@@ -274,7 +275,8 @@ async function mirrorProjects(client) {
        ON CONFLICT (project_id) DO UPDATE SET
          canvas_json = EXCLUDED.canvas_json,
          revision = EXCLUDED.revision,
-         updated_at = EXCLUDED.updated_at`,
+         updated_at = EXCLUDED.updated_at
+       WHERE project_canvas.updated_at <= EXCLUDED.updated_at`,
       [
         toBigInt(canvas.projectId),
         json(canvas.canvas || {}),
@@ -293,7 +295,8 @@ async function mirrorProjects(client) {
          description = EXCLUDED.description,
          structure_json = EXCLUDED.structure_json,
          deleted = EXCLUDED.deleted,
-         updated_at = EXCLUDED.updated_at`,
+         updated_at = EXCLUDED.updated_at
+       WHERE canvas_element_group.updated_at <= EXCLUDED.updated_at`,
       [
         toBigInt(group.id),
         toBigInt(group.userId),
@@ -326,11 +329,14 @@ async function mirrorProjects(client) {
 
   for (const share of store.shares.values()) {
     await client.query(
-      `INSERT INTO project_share (id, share_code, project_id, user_id, status, expire_at, created_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7)
+      `INSERT INTO project_share (id, share_code, project_id, user_id, status, expire_at, created_at, title, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
        ON CONFLICT (id) DO UPDATE SET
          status = EXCLUDED.status,
-         expire_at = EXCLUDED.expire_at`,
+         expire_at = EXCLUDED.expire_at,
+         title = EXCLUDED.title,
+         updated_at = EXCLUDED.updated_at
+       WHERE project_share.updated_at IS NULL OR project_share.updated_at <= EXCLUDED.updated_at`,
       [
         shareId(share.shareCode),
         share.shareCode,
@@ -338,7 +344,9 @@ async function mirrorProjects(client) {
         toBigInt(share.userId),
         share.status || "ACTIVE",
         timestamp(share.expireAt || "2999-12-31T00:00:00.000Z"),
-        timestamp(share.createdAt)
+        timestamp(share.createdAt),
+        nullable(share.title),
+        timestamp(share.updatedAt || share.createdAt)
       ]
     );
   }
@@ -347,8 +355,8 @@ async function mirrorProjects(client) {
 async function mirrorAssets(client) {
   for (const asset of store.assets.values()) {
     await client.query(
-      `INSERT INTO asset (id, user_id, project_id, type, source, file_name, object_key, content_type, file_size, width, height, duration_seconds, review_status, deleted, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+      `INSERT INTO asset (id, user_id, project_id, type, source, file_name, object_key, content_type, file_size, width, height, duration_seconds, review_status, deleted, created_at, updated_at, preview_url, tags_json)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
        ON CONFLICT (id) DO UPDATE SET
          project_id = EXCLUDED.project_id,
          file_name = EXCLUDED.file_name,
@@ -360,7 +368,10 @@ async function mirrorAssets(client) {
          duration_seconds = EXCLUDED.duration_seconds,
          review_status = EXCLUDED.review_status,
          deleted = EXCLUDED.deleted,
-         updated_at = EXCLUDED.updated_at`,
+         updated_at = EXCLUDED.updated_at,
+         preview_url = EXCLUDED.preview_url,
+         tags_json = EXCLUDED.tags_json
+       WHERE asset.updated_at <= EXCLUDED.updated_at`,
       [
         toBigInt(asset.id),
         nullableBigInt(asset.userId) || 0,
@@ -377,11 +388,14 @@ async function mirrorAssets(client) {
         asset.reviewStatus || "AVAILABLE",
         asset.reviewStatus === "DELETED" ? 1 : 0,
         timestamp(asset.createdAt),
-        timestamp(asset.updatedAt || asset.createdAt)
+        timestamp(asset.updatedAt || asset.createdAt),
+        nullable(asset.previewUrl),
+        json(asset.tags || [])
       ]
     );
   }
 
+  await client.query("DELETE FROM asset_favorite");
   let favoriteId = 1;
   for (const value of store.favorites.values()) {
     const [userId, assetId] = String(value).split(":");
@@ -395,17 +409,20 @@ async function mirrorAssets(client) {
 }
 
 async function mirrorAi(client) {
+  await client.query("DELETE FROM generation_result");
   for (const task of store.generationTasks.values()) {
     await client.query(
-      `INSERT INTO generation_task (id, user_id, project_id, node_id, task_type, capability_code, prompt, parameters_json, reference_asset_ids_json, idempotency_key, provider_task_id, status, progress, estimated_points, actual_points, error_code, error_message, created_at, updated_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+      `INSERT INTO generation_task (id, user_id, project_id, node_id, task_type, capability_code, prompt, parameters_json, reference_asset_ids_json, idempotency_key, provider_task_id, status, progress, estimated_points, actual_points, error_code, error_message, created_at, updated_at, results_json)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
        ON CONFLICT (id) DO UPDATE SET
          status = EXCLUDED.status,
          progress = EXCLUDED.progress,
          actual_points = EXCLUDED.actual_points,
          error_code = EXCLUDED.error_code,
          error_message = EXCLUDED.error_message,
-         updated_at = EXCLUDED.updated_at`,
+         updated_at = EXCLUDED.updated_at,
+         results_json = EXCLUDED.results_json
+       WHERE generation_task.updated_at <= EXCLUDED.updated_at`,
       [
         toBigInt(task.id),
         toBigInt(task.userId),
@@ -425,7 +442,8 @@ async function mirrorAi(client) {
         nullable(task.error?.code),
         nullable(task.error?.message),
         timestamp(task.createdAt),
-        timestamp(task.updatedAt || task.createdAt)
+        timestamp(task.updatedAt || task.createdAt),
+        json(task.results || [])
       ]
     );
 
@@ -449,7 +467,8 @@ async function mirrorChat(client) {
        ON CONFLICT (id) DO UPDATE SET
          title = EXCLUDED.title,
          deleted = EXCLUDED.deleted,
-         updated_at = EXCLUDED.updated_at`,
+         updated_at = EXCLUDED.updated_at
+       WHERE chat_session.updated_at <= EXCLUDED.updated_at`,
       [
         toBigInt(session.id),
         toBigInt(session.userId),
@@ -492,7 +511,8 @@ async function mirrorWorkflows(client) {
          workflow_json = EXCLUDED.workflow_json,
          deleted = EXCLUDED.deleted,
          updated_at = EXCLUDED.updated_at,
-         attributes = EXCLUDED.attributes`,
+         attributes = EXCLUDED.attributes
+       WHERE workflow.updated_at <= EXCLUDED.updated_at`,
       [
         toBigInt(workflow.id),
         nullableBigInt(workflow.userId) || 0,
@@ -517,7 +537,8 @@ async function mirrorBilling(client) {
        ON CONFLICT (id) DO UPDATE SET
          status = EXCLUDED.status,
          paid_at = EXCLUDED.paid_at,
-         updated_at = EXCLUDED.updated_at`,
+         updated_at = EXCLUDED.updated_at
+       WHERE payment_order.updated_at <= EXCLUDED.updated_at`,
       [
         toBigInt(order.id),
         order.orderNo,
@@ -545,7 +566,8 @@ async function mirrorBilling(client) {
        ON CONFLICT (id) DO UPDATE SET
          channel_transaction_no = EXCLUDED.channel_transaction_no,
          status = EXCLUDED.status,
-         updated_at = EXCLUDED.updated_at`,
+         updated_at = EXCLUDED.updated_at
+       WHERE payment_transaction.updated_at <= EXCLUDED.updated_at`,
       [
         toBigInt(transaction.id),
         transaction.transactionNo,
@@ -576,7 +598,8 @@ async function mirrorBilling(client) {
          current_period_end = EXCLUDED.current_period_end,
          auto_renew = EXCLUDED.auto_renew,
          latest_order_no = EXCLUDED.latest_order_no,
-         updated_at = EXCLUDED.updated_at`,
+         updated_at = EXCLUDED.updated_at
+       WHERE user_subscription.updated_at <= EXCLUDED.updated_at`,
       [
         subscriptionId++,
         toBigInt(userId),
@@ -607,7 +630,8 @@ async function mirrorAdminContent(client) {
          status = EXCLUDED.status,
          updated_at = EXCLUDED.updated_at,
          deleted = EXCLUDED.deleted,
-         attributes = EXCLUDED.attributes`,
+         attributes = EXCLUDED.attributes
+       WHERE prompt_template.updated_at <= EXCLUDED.updated_at`,
       [
         toBigInt(template.id),
         template.code,
@@ -636,7 +660,8 @@ async function mirrorAdminContent(client) {
          status = EXCLUDED.status,
          gmt_modified = EXCLUDED.gmt_modified,
          deleted = EXCLUDED.deleted,
-         attributes = EXCLUDED.attributes`,
+         attributes = EXCLUDED.attributes
+       WHERE content_category.gmt_modified <= EXCLUDED.gmt_modified`,
       [
         toBigInt(category.id),
         category.categoryCode,
@@ -677,7 +702,8 @@ async function mirrorAdminContent(client) {
          express_no = EXCLUDED.express_no,
          gmt_modified = EXCLUDED.gmt_modified,
          deleted = EXCLUDED.deleted,
-         attributes = EXCLUDED.attributes`,
+         attributes = EXCLUDED.attributes
+       WHERE invoice_application.gmt_modified <= EXCLUDED.gmt_modified`,
       [
         toBigInt(invoice.id),
         invoice.invoiceNo,
@@ -718,7 +744,8 @@ async function mirrorAdminContent(client) {
          remark = EXCLUDED.remark,
          gmt_modified = EXCLUDED.gmt_modified,
          deleted = EXCLUDED.deleted,
-         attributes = EXCLUDED.attributes`,
+         attributes = EXCLUDED.attributes
+       WHERE admin_operation_log.gmt_modified <= EXCLUDED.gmt_modified`,
       [
         toBigInt(log.id),
         toBigInt(log.adminUserId),

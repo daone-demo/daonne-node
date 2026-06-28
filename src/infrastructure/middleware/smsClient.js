@@ -16,7 +16,8 @@ export async function sendSms(phone, code, scene = "LOGIN") {
   logSmsProvider("sms_provider_aliyun_send_start", {
     phone: maskPhone(phone),
     scene,
-    regionId: appConfig.contentSafety.regionId || "cn-shanghai",
+    regionId: appConfig.sms.regionId,
+    endpoint: appConfig.sms.endpoint,
     hasAccessKeyId: Boolean(appConfig.aliyun.accessKeyId),
     hasAccessKeySecret: Boolean(appConfig.aliyun.accessKeySecret),
     hasSignName: Boolean(appConfig.sms.signName),
@@ -30,7 +31,7 @@ export async function sendSms(phone, code, scene = "LOGIN") {
     Action: "SendSms",
     Format: "JSON",
     PhoneNumbers: phone,
-    RegionId: appConfig.contentSafety.regionId || "cn-shanghai",
+    RegionId: appConfig.sms.regionId,
     SignName: appConfig.sms.signName,
     SignatureMethod: "HMAC-SHA1",
     SignatureNonce: crypto.randomUUID(),
@@ -46,7 +47,7 @@ export async function sendSms(phone, code, scene = "LOGIN") {
     .createHmac("sha1", `${appConfig.aliyun.accessKeySecret}&`)
     .update(stringToSign)
     .digest("base64");
-  const url = `https://dysmsapi.aliyuncs.com/?${canonical}&Signature=${percentEncode(signature)}`;
+  const url = `https://${appConfig.sms.endpoint}/?${canonical}&Signature=${percentEncode(signature)}`;
   let response;
   let result;
   try {
@@ -85,8 +86,10 @@ export async function sendSms(phone, code, scene = "LOGIN") {
 
 function assertSmsProviderConfigured() {
   const missing = [];
-  if (!appConfig.aliyun.accessKeyId) missing.push("ALIYUN_ACCESS_KEY_ID");
-  if (!appConfig.aliyun.accessKeySecret) missing.push("ALIYUN_ACCESS_KEY_SECRET");
+  if (!appConfig.aliyun.accessKeyId) missing.push("ALIYUN_ACCESS_KEY_ID or ALIBABA_CLOUD_ACCESS_KEY_ID");
+  if (!appConfig.aliyun.accessKeySecret) missing.push("ALIYUN_ACCESS_KEY_SECRET or ALIBABA_CLOUD_ACCESS_KEY_SECRET");
+  if (!appConfig.sms.regionId) missing.push("SMS_REGION_ID");
+  if (!appConfig.sms.endpoint) missing.push("SMS_ENDPOINT");
   if (!appConfig.sms.signName) missing.push("SMS_SIGN_NAME");
   if (!appConfig.sms.templateCode) missing.push("SMS_TEMPLATE_CODE");
   if (missing.length) {
