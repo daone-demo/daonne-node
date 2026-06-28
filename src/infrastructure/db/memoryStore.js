@@ -1,4 +1,5 @@
 import { getSequence, nextId, setSequence, syncSequenceFromIds } from "../common/id.js";
+import { appConfig } from "../config/env.js";
 
 const now = () => new Date().toISOString();
 
@@ -272,19 +273,35 @@ function syncSequenceFromStore() {
   syncSequenceFromIds(ids);
 }
 
+export function reseedStore() {
+  const changed = seed();
+  syncSequenceFromStore();
+  return changed;
+}
+
 function seed() {
   const t = now();
-  if (store.plans.size === 0) {
-    const planSeeds = [
-      ["1001", "TEAM", "团队协作版", "Daone 团队套餐", ["12000积分/年", "3 人成员协作", "150G 存储空间"]],
-      ["1002", "TEAM_PLUS", "团队Plus版", "Daone 团队 Plus 套餐", ["30000积分/年", "5 人成员协作", "200G 存储空间"]],
-      ["1003", "TEAM_MAX", "团队Max版", "Daone 团队 Max 套餐", ["60000积分/年", "10 人成员协作", "300G 存储空间"]],
-      ["1004", "ENTERPRISE", "企业版", "Daone 企业套餐", ["120000积分/2年", "20 人成员协作", "500G 存储空间", "1 对 1 专属服务"]],
-      ["1005", "TRIAL", "试用版", "5 天全功能试用", ["5 天试用", "3000 积分", "专属指导服务"]]
-    ];
-    for (const [id, planCode, planName, description, benefits] of planSeeds) {
-      store.plans.set(id, {
-        id,
+  let changed = false;
+  const planSeeds = [
+    ["1001", "TEAM", "团队协作版", "Daone 团队套餐", ["12000积分/年", "3 人成员协作", "150G 存储空间"]],
+    ["1002", "TEAM_PLUS", "团队Plus版", "Daone 团队 Plus 套餐", ["30000积分/年", "5 人成员协作", "200G 存储空间"]],
+    ["1003", "TEAM_MAX", "团队Max版", "Daone 团队 Max 套餐", ["60000积分/年", "10 人成员协作", "300G 存储空间"]],
+    ["1004", "ENTERPRISE", "企业版", "Daone 企业套餐", ["120000积分/2年", "20 人成员协作", "500G 存储空间", "1 对 1 专属服务"]],
+    ["1005", "TRIAL", "试用版", "5 天全功能试用", ["5 天试用", "3000 积分", "专属指导服务"]]
+  ];
+  if (shouldSeedPaymentTestPlan()) {
+    planSeeds.push(
+      ["1006", "TEST_PAY", "支付测试套餐", "微信支付和支付宝支付联调专用套餐", ["1 天测试会员", "1 积分", "仅用于测试环境支付联调"]]
+    );
+  }
+
+  const planIdByCode = new Map();
+  for (const [id, planCode, planName, description, benefits] of planSeeds) {
+    const existing = [...store.plans.values()].find((item) => item.planCode === planCode);
+    if (!existing) {
+      const planId = unusedNumericId(id, store.plans);
+      store.plans.set(planId, {
+        id: planId,
         planCode,
         planName,
         description,
@@ -293,21 +310,34 @@ function seed() {
         createdAt: t,
         updatedAt: t
       });
+      changed = true;
+      planIdByCode.set(planCode, planId);
+    } else {
+      planIdByCode.set(planCode, existing.id);
     }
-    for (const price of [
-      ["1101", "1001", "TEAM_YEAR", "YEAR", 1, 599900, 799900, 12000],
-      ["1102", "1001", "TEAM_MONTH", "MONTH", 1, 69900, 89900, 1000],
-      ["1103", "1002", "TEAM_PLUS_YEAR", "YEAR", 1, 899900, 1199900, 30000],
-      ["1104", "1002", "TEAM_PLUS_MONTH", "MONTH", 1, 99900, 129900, 2500],
-      ["1105", "1003", "TEAM_MAX_YEAR", "YEAR", 1, 1299900, 1799900, 60000],
-      ["1106", "1003", "TEAM_MAX_MONTH", "MONTH", 1, 139900, 189900, 5000],
-      ["1107", "1004", "ENTERPRISE_TWO_YEARS", "YEAR", 2, 2999900, 3999900, 120000],
-      ["1108", "1004", "ENTERPRISE_MONTH", "MONTH", 1, 299900, 399900, 10000],
-      ["1109", "1005", "TRIAL_5D", "DAY", 5, 9900, null, 3000]
-    ]) {
+  }
+
+  const priceSeeds = [
+    ["1101", "TEAM", "TEAM_YEAR", "YEAR", 1, 599900, 799900, 12000],
+    ["1102", "TEAM", "TEAM_MONTH", "MONTH", 1, 69900, 89900, 1000],
+    ["1103", "TEAM_PLUS", "TEAM_PLUS_YEAR", "YEAR", 1, 899900, 1199900, 30000],
+    ["1104", "TEAM_PLUS", "TEAM_PLUS_MONTH", "MONTH", 1, 99900, 129900, 2500],
+    ["1105", "TEAM_MAX", "TEAM_MAX_YEAR", "YEAR", 1, 1299900, 1799900, 60000],
+    ["1106", "TEAM_MAX", "TEAM_MAX_MONTH", "MONTH", 1, 139900, 189900, 5000],
+    ["1107", "ENTERPRISE", "ENTERPRISE_TWO_YEARS", "YEAR", 2, 2999900, 3999900, 120000],
+    ["1108", "ENTERPRISE", "ENTERPRISE_MONTH", "MONTH", 1, 299900, 399900, 10000],
+    ["1109", "TRIAL", "TRIAL_5D", "DAY", 5, 9900, null, 3000]
+  ];
+  if (shouldSeedPaymentTestPlan()) {
+    priceSeeds.push(["1110", "TEST_PAY", "TEST_PAY_1FEN", "DAY", 1, 1, null, 1]);
+  }
+
+  for (const price of priceSeeds) {
+    if (!store.prices.has(price[2])) {
+      const priceId = unusedNumericId(price[0], store.prices);
       store.prices.set(price[2], {
-        id: price[0],
-        planId: price[1],
+        id: priceId,
+        planId: planIdByCode.get(price[1]),
         priceCode: price[2],
         cycleUnit: price[3],
         cycleCount: price[4],
@@ -318,6 +348,7 @@ function seed() {
         createdAt: t,
         updatedAt: t
       });
+      changed = true;
     }
   }
   for (const model of DEFAULT_MODEL_CONFIGS) {
@@ -487,4 +518,18 @@ function seed() {
       });
     }
   }
+  return changed;
+}
+
+function shouldSeedPaymentTestPlan() {
+  return appConfig.profile !== "prod";
+}
+
+function unusedNumericId(preferredId, map) {
+  const usedIds = new Set([...map.values()].map((item) => String(item.id)));
+  let candidate = BigInt(preferredId);
+  while (usedIds.has(candidate.toString())) {
+    candidate += 1n;
+  }
+  return candidate.toString();
 }

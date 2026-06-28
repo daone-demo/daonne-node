@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { appConfig } from "../config/env.js";
 import { createLogger } from "../common/logger.js";
+import { badGateway } from "../../service/common/errors.js";
 
 const smsProviderLog = createLogger("sms_provider");
 
@@ -15,7 +16,8 @@ export async function sendSms(phone, code, scene = "LOGIN") {
   logSmsProvider("sms_provider_aliyun_send_start", {
     phone: maskPhone(phone),
     scene,
-    regionId: appConfig.contentSafety.regionId || "cn-shanghai",
+    regionId: appConfig.sms.regionId,
+    endpoint: appConfig.sms.endpoint,
     hasAccessKeyId: Boolean(appConfig.aliyun.accessKeyId),
     hasAccessKeySecret: Boolean(appConfig.aliyun.accessKeySecret),
     hasSignName: Boolean(appConfig.sms.signName),
@@ -23,12 +25,13 @@ export async function sendSms(phone, code, scene = "LOGIN") {
     signNameLength: appConfig.sms.signName.length,
     templateCode: appConfig.sms.templateCode || null
   });
+  assertSmsProviderConfigured();
   const params = {
     AccessKeyId: appConfig.aliyun.accessKeyId,
     Action: "SendSms",
     Format: "JSON",
     PhoneNumbers: phone,
-    RegionId: appConfig.contentSafety.regionId || "cn-shanghai",
+    RegionId: appConfig.sms.regionId,
     SignName: appConfig.sms.signName,
     SignatureMethod: "HMAC-SHA1",
     SignatureNonce: crypto.randomUUID(),
@@ -44,7 +47,7 @@ export async function sendSms(phone, code, scene = "LOGIN") {
     .createHmac("sha1", `${appConfig.aliyun.accessKeySecret}&`)
     .update(stringToSign)
     .digest("base64");
-  const url = `https://dysmsapi.aliyuncs.com/?${canonical}&Signature=${percentEncode(signature)}`;
+  const url = `https://${appConfig.sms.endpoint}/?${canonical}&Signature=${percentEncode(signature)}`;
   let response;
   let result;
   try {
@@ -57,7 +60,9 @@ export async function sendSms(phone, code, scene = "LOGIN") {
       errorName: error.name,
       errorMessage: error.message
     }, "error");
-    throw error;
+    throw badGateway("SMS_PROVIDER_NETWORK_ERROR", "短信服务网络异常", {
+      reason: error.message
+    });
   }
   logSmsProvider("sms_provider_aliyun_response", {
     phone: maskPhone(phone),
@@ -69,13 +74,27 @@ export async function sendSms(phone, code, scene = "LOGIN") {
     aliyunBizId: result.BizId
   }, response.ok && result.Code === "OK" ? "info" : "error");
   if (!response.ok || result.Code !== "OK") {
-    const error = new Error(`Aliyun SMS failed: ${result.Code || response.status}`);
-    error.providerCode = result.Code;
-    error.providerMessage = result.Message;
-    error.providerRequestId = result.RequestId;
-    throw error;
+    throw badGateway("SMS_PROVIDER_ERROR", "短信服务发送失败", {
+      status: response.status,
+      providerCode: result.Code,
+      providerMessage: result.Message,
+      providerRequestId: result.RequestId
+    });
   }
   return result;
+}
+
+function assertSmsProviderConfigured() {
+  const missing = [];
+  if (!appConfig.aliyun.accessKeyId) missing.push("ALIYUN_ACCESS_KEY_ID or ALIBABA_CLOUD_ACCESS_KEY_ID");
+  if (!appConfig.aliyun.accessKeySecret) missing.push("ALIYUN_ACCESS_KEY_SECRET or ALIBABA_CLOUD_ACCESS_KEY_SECRET");
+  if (!appConfig.sms.regionId) missing.push("SMS_REGION_ID");
+  if (!appConfig.sms.endpoint) missing.push("SMS_ENDPOINT");
+  if (!appConfig.sms.signName) missing.push("SMS_SIGN_NAME");
+  if (!appConfig.sms.templateCode) missing.push("SMS_TEMPLATE_CODE");
+  if (missing.length) {
+    throw badGateway("SMS_PROVIDER_NOT_CONFIGURED", "短信服务未配置完整", { missing });
+  }
 }
 
 function canonicalQuery(params) {

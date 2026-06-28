@@ -1276,6 +1276,9 @@ export function docsHtml() {
     }
 
     function responseFieldRows(operation) {
+      if (operation["x-data-schema"]) {
+        return collectSchemaFields(operation["x-data-schema"], { location: "response.data" });
+      }
       const response = operation.responses?.["200"] || Object.values(operation.responses || {})[0];
       const schema = response?.content?.["application/json"]?.schema;
       return collectSchemaFields(schema, { location: "response" });

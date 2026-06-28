@@ -72,8 +72,8 @@ npm run build:prod   # 强制 prod profile
 部署后接口前缀：
 
 ```text
-https://api.daoneai.com/api/v1          # 生产
-https://api-test.daoneai.com/api/v1     # 测试
+https://www.daoneai.com/api/v1          # 生产
+https://dev.daoneai.com/api/v1          # 测试 / 预览
 ```
 
 ## Environment Profiles
@@ -81,9 +81,8 @@ https://api-test.daoneai.com/api/v1     # 测试
 Node.js 版本使用轻量 `.env` 文件区分环境，作用类似 Java 的 `application-local.yml`、`application-test.yml`、`application-prod.yml`。
 
 - `config/application.local.env`: 本地环境。默认使用内存数据和 Mock Redis、OSS、短信、模型、内容安全、支付。
-- `config/application.test.env.example`: 测试环境模板。用于 Vercel Preview/Test，默认使用 Postgres/Neon，填写真实 Redis、OSS、支付等配置。
-- `config/application.prod.env.example`: 生产环境模板。用于 Vercel Production，默认使用 Postgres/Neon，填写真实 Redis、OSS、支付等配置。
-- `.env.vercel.example`: Vercel 控制台环境变量总模板。
+- `config/application.test.env`: 测试环境非敏感模板。用于 Vercel Preview/Test，真实数据库、Redis、OSS、支付密钥必须放在 Vercel 环境变量或本地私有 env 文件；不要把真实密钥提交进仓库。
+- `config/application.prod.env`: 生产环境非敏感模板。用于 Vercel Production，真实数据库、Redis、OSS、支付密钥必须放在 Vercel 环境变量。
 
 环境识别规则：
 
@@ -137,22 +136,22 @@ Vercel Serverless 函数不是长驻应用。local Profile 固定使用内存仓
 `test`/`prod` Profile 会启用真实中间件适配：
 
 - Redis 存储短信验证码和登录 token。
-- Postgres/Neon `daone_runtime_store` 保存 Node 运行态快照；仍保留 MySQL 兼容分支，可通过 `DAONE_DB_TYPE=mysql|postgres` 选择。
+- Postgres/Neon 使用业务表保存项目、画布、素材、聊天、订单、积分和后台内容；仍保留 MySQL 快照兼容分支，可通过 `DAONE_DB_TYPE=mysql|postgres` 选择。
 - OSS PUT 预签名上传。
 - 阿里云短信发送验证码。
 - 内容安全、模型服务通过 HTTP Provider 调用。
 - 微信 Native 支付和支付宝 Page Pay 创建支付。
 
-MySQL 与 Vercel Postgres 的运行态快照可通过脚本同步：
+旧 MySQL 快照与 Vercel Postgres 业务表迁移前的快照数据可通过脚本同步：
 
 ```bash
 npm run db:sync -- mysql-to-postgres
 npm run db:sync -- postgres-to-mysql
 ```
 
-高并发生产前建议继续替换：
+高并发生产前建议继续完善：
 
-- Database runtime snapshot -> 表级 Repository 和事务边界。
+- 内存工作集桥接 -> 更细粒度的 Repository 和事务边界。
 - 通用内容安全 Provider -> 正式内容安全 SDK 或公司内部风控服务。
 - 模型 HTTP Provider -> 统一模型网关、任务回调和重试补偿。
 

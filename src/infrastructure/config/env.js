@@ -53,6 +53,8 @@ export const appConfig = {
   },
   sms: {
     mockEnabled: boolEnv("DAONE_SMS_MOCK_ENABLED", isLocal()),
+    regionId: env("SMS_REGION_ID", "cn-hangzhou"),
+    endpoint: env("SMS_ENDPOINT", "dysmsapi.aliyuncs.com"),
     signName: env("SMS_SIGN_NAME", ""),
     templateCode: env("SMS_TEMPLATE_CODE", "")
   },
@@ -133,8 +135,8 @@ export const appConfig = {
     }
   },
   aliyun: {
-    accessKeyId: env("ALIYUN_ACCESS_KEY_ID", ""),
-    accessKeySecret: env("ALIYUN_ACCESS_KEY_SECRET", "")
+    accessKeyId: firstEnv(["ALIYUN_ACCESS_KEY_ID", "ALIBABA_CLOUD_ACCESS_KEY_ID", "ALICLOUD_ACCESS_KEY_ID"], ""),
+    accessKeySecret: firstEnv(["ALIYUN_ACCESS_KEY_SECRET", "ALIBABA_CLOUD_ACCESS_KEY_SECRET", "ALICLOUD_ACCESS_KEY_SECRET"], "")
   }
 };
 
@@ -177,6 +179,8 @@ function missingRequiredConfig() {
     "DAONE_CORS_ALLOWED_ORIGINS",
     "DAONE_ADMIN_PHONES"
   ]);
+
+  requireDisabledMocks(missing);
 
   if (appConfig.dataSource.type === "mysql") {
     requireKeys(missing, [
@@ -246,10 +250,31 @@ function missingRequiredConfig() {
 
 function configWarnings() {
   const warnings = [];
-  if (!isLocal() && ["mysql", "postgres"].includes(appConfig.dataSource.type)) {
-    warnings.push("The Node/Vercel runtime uses a database snapshot bridge. Replace it with table-level repositories before high-concurrency production traffic.");
+  if (!isLocal() && appConfig.dataSource.type === "mysql") {
+    warnings.push("The MySQL runtime store still uses a database snapshot bridge. Use PostgreSQL business tables for test and production traffic.");
+  }
+  if (!isLocal() && appConfig.cors.allowedOrigins.includes("*")) {
+    warnings.push("CORS allows every origin in a non-local profile. Restrict DAONE_CORS_ALLOWED_ORIGINS to the frontend and admin domains.");
+  }
+  if (profile === "prod" && !appConfig.cors.allowedOrigins.includes("https://admin.daoneai.com")) {
+    warnings.push("Production CORS does not include https://admin.daoneai.com, so the admin frontend cannot call the API from a browser.");
   }
   return warnings;
+}
+
+function requireDisabledMocks(missing) {
+  const mockFlags = [
+    ["DAONE_SMS_MOCK_ENABLED", appConfig.sms.mockEnabled],
+    ["DAONE_STORAGE_MOCK_ENABLED", appConfig.storage.mockEnabled],
+    ["DAONE_MODEL_MOCK_ENABLED", appConfig.model.mockEnabled],
+    ["DAONE_CONTENT_SAFETY_MOCK_ENABLED", appConfig.contentSafety.mockEnabled],
+    ["DAONE_PAYMENT_MOCK_ENABLED", appConfig.payment.mockEnabled]
+  ];
+  for (const [key, enabled] of mockFlags) {
+    if (enabled) {
+      missing.push(`${key}=false`);
+    }
+  }
 }
 
 function requireKeys(missing, keys) {
@@ -267,7 +292,8 @@ function requireOneOf(missing, keys) {
 }
 
 function requireAliyunKeys(missing) {
-  requireKeys(missing, ["ALIYUN_ACCESS_KEY_ID", "ALIYUN_ACCESS_KEY_SECRET"]);
+  requireOneOf(missing, ["ALIYUN_ACCESS_KEY_ID", "ALIBABA_CLOUD_ACCESS_KEY_ID", "ALICLOUD_ACCESS_KEY_ID"]);
+  requireOneOf(missing, ["ALIYUN_ACCESS_KEY_SECRET", "ALIBABA_CLOUD_ACCESS_KEY_SECRET", "ALICLOUD_ACCESS_KEY_SECRET"]);
 }
 
 export function resolveProfile() {
@@ -324,6 +350,15 @@ function modelProviderVideoValue(provider, key, fallback) {
 
 function env(key, fallback) {
   return process.env[key] === undefined || process.env[key] === "" ? fallback : process.env[key];
+}
+
+function firstEnv(keys, fallback) {
+  for (const key of keys) {
+    if (process.env[key] !== undefined && process.env[key] !== "") {
+      return process.env[key];
+    }
+  }
+  return fallback;
 }
 
 function numberEnv(key, fallback) {

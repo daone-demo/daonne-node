@@ -1,13 +1,61 @@
 import { store } from "../../infrastructure/db/memoryStore.js";
+import { findPostgresUserById, updatePostgresUserProfile } from "../../infrastructure/middleware/postgresRuntimeStore.js";
 import { badRequest, forbidden, notFound } from "../common/errors.js";
 
-export function getProfile(userId) {
-  const user = store.users.get(userId);
+export async function getProfile(userId) {
+  const user = await loadProfileUser(userId);
   if (!user) {
     throw notFound("用户不存在");
   }
-  const points = store.pointAccounts.get(userId) || { availablePoints: 0, frozenPoints: 0, grantedTotal: 0 };
-  const subscription = store.subscriptions.get(userId) || null;
+  syncStoreUser(user);
+  return profileView(user);
+}
+
+export async function updateProfile(userId, body) {
+  let user = await loadProfileUser(userId);
+  if (!user) {
+    throw notFound("用户不存在");
+  }
+  syncStoreUser(user);
+  const fields = {};
+  if (body.nickname !== undefined) fields.nickname = body.nickname;
+  if (body.email !== undefined) fields.email = normalizeEmail(body.email);
+  if (body.gender !== undefined) fields.gender = body.gender;
+  if (body.birthday !== undefined) fields.birthday = body.birthday;
+  if (body.avatarAssetId !== undefined && body.avatarAssetId !== null) {
+    const asset = store.assets.get(String(body.avatarAssetId));
+    if (!asset || asset.userId !== userId) {
+      throw forbidden();
+    }
+    fields.avatarUrl = asset.previewUrl;
+  } else if (body.avatarUrl !== undefined) {
+    fields.avatarUrl = normalizeAvatarUrl(body.avatarUrl);
+  }
+
+  const persisted = await updatePostgresUserProfile(userId, fields);
+  if (persisted) {
+    syncStoreUser(persisted);
+    return profileView(persisted);
+  }
+
+  const t = new Date().toISOString();
+  user = store.users.get(userId);
+  Object.assign(user, fields, { updatedAt: t });
+  return profileView(user);
+}
+
+async function loadProfileUser(userId) {
+  return (await findPostgresUserById(userId)) || store.users.get(userId) || null;
+}
+
+function syncStoreUser(user) {
+  const existing = store.users.get(user.id) || {};
+  store.users.set(user.id, { ...existing, ...user });
+}
+
+function profileView(user) {
+  const points = store.pointAccounts.get(user.id) || { availablePoints: 0, frozenPoints: 0, grantedTotal: 0 };
+  const subscription = store.subscriptions.get(user.id) || null;
   const vipName = resolveVipName(subscription);
   return {
     id: user.id,
@@ -25,29 +73,6 @@ export function getProfile(userId) {
       grantedTotal: points.grantedTotal
     }
   };
-}
-
-export function updateProfile(userId, body) {
-  const user = store.users.get(userId);
-  if (!user) {
-    throw notFound("用户不存在");
-  }
-  const t = new Date().toISOString();
-  if (body.nickname !== undefined) user.nickname = body.nickname;
-  if (body.email !== undefined) user.email = normalizeEmail(body.email);
-  if (body.gender !== undefined) user.gender = body.gender;
-  if (body.birthday !== undefined) user.birthday = body.birthday;
-  if (body.avatarAssetId !== undefined && body.avatarAssetId !== null) {
-    const asset = store.assets.get(String(body.avatarAssetId));
-    if (!asset || asset.userId !== userId) {
-      throw forbidden();
-    }
-    user.avatarUrl = asset.previewUrl;
-  } else if (body.avatarUrl !== undefined) {
-    user.avatarUrl = normalizeAvatarUrl(body.avatarUrl);
-  }
-  user.updatedAt = t;
-  return getProfile(userId);
 }
 
 export function pointAccount(userId) {

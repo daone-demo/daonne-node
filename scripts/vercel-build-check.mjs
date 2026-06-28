@@ -28,7 +28,7 @@ const required = [
 
 // 本地构建需有对应 profile 的 secrets 文件；Vercel 上由控制台环境变量注入
 if (!process.env.VERCEL) {
-  required.push(".env.development.local", `.env.${buildProfile}.local`);
+  required.push(`.env.${buildProfile}.local`);
 }
 for (const file of required) {
   if (!existsSync(file)) {

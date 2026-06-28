@@ -1,10 +1,9 @@
 import pg from "pg";
 import { appConfig } from "../config/env.js";
-import { exportStoreSnapshot, importStoreSnapshot } from "../db/memoryStore.js";
 import { mirrorPostgresBusinessTables } from "./postgresBusinessMirror.js";
+import { ensurePostgresBusinessSchema, hydratePostgresBusinessStore } from "./postgresBusinessStore.js";
 
 const { Pool } = pg;
-const STORE_KEY = "daone-memory-store-v1";
 let pool = null;
 let initialized = false;
 
@@ -17,15 +16,10 @@ export async function hydratePostgresRuntimeStore() {
     return;
   }
   await ensureRuntimeTable();
-  const { rows } = await getPool().query(
-    "SELECT store_value FROM daone_runtime_store WHERE store_key = $1",
-    [STORE_KEY]
-  );
-  if (!rows.length) {
+  const shouldPersistSeeds = await hydratePostgresBusinessStore(getPool());
+  if (shouldPersistSeeds) {
     await persistPostgresRuntimeStore();
-    return;
   }
-  importStoreSnapshot(JSON.parse(rows[0].store_value));
 }
 
 export async function persistPostgresRuntimeStore() {
@@ -33,14 +27,6 @@ export async function persistPostgresRuntimeStore() {
     return;
   }
   await ensureRuntimeTable();
-  const payload = JSON.stringify(exportStoreSnapshot());
-  await getPool().query(
-    `INSERT INTO daone_runtime_store (store_key, store_value, updated_at)
-     VALUES ($1, $2, NOW())
-     ON CONFLICT (store_key)
-     DO UPDATE SET store_value = EXCLUDED.store_value, updated_at = NOW()`,
-    [STORE_KEY, payload]
-  );
   await mirrorPostgresBusinessTables(getPool());
 }
 
@@ -122,17 +108,60 @@ export async function findPostgresUserByPhone(phone) {
   return rows[0] ? mapUserRow(rows[0]) : null;
 }
 
+export async function findPostgresUserById(userId) {
+  if (!postgresRuntimeStoreEnabled()) {
+    return null;
+  }
+  await ensureRuntimeTable();
+  const { rows } = await getPool().query(
+    `SELECT id, phone, nickname, avatar_url, email, gender, birthday, status, role, created_at, updated_at
+       FROM user_account
+      WHERE id = $1
+      LIMIT 1`,
+    [userId]
+  );
+  return rows[0] ? mapUserRow(rows[0]) : null;
+}
+
+export async function updatePostgresUserProfile(userId, fields) {
+  if (!postgresRuntimeStoreEnabled()) {
+    return null;
+  }
+  const updates = [];
+  const values = [];
+  const columnMap = {
+    nickname: "nickname",
+    avatarUrl: "avatar_url",
+    email: "email",
+    gender: "gender",
+    birthday: "birthday"
+  };
+  for (const [key, column] of Object.entries(columnMap)) {
+    if (fields[key] !== undefined) {
+      values.push(fields[key]);
+      updates.push(`${column} = $${values.length}`);
+    }
+  }
+  if (!updates.length) {
+    return findPostgresUserById(userId);
+  }
+  values.push(userId);
+  await ensureRuntimeTable();
+  const { rows } = await getPool().query(
+    `UPDATE user_account
+        SET ${updates.join(", ")}, updated_at = NOW()
+      WHERE id = $${values.length}
+      RETURNING id, phone, nickname, avatar_url, email, gender, birthday, status, role, created_at, updated_at`,
+    values
+  );
+  return rows[0] ? mapUserRow(rows[0]) : null;
+}
+
 async function ensureRuntimeTable() {
   if (initialized) {
     return;
   }
-  await getPool().query(`
-    CREATE TABLE IF NOT EXISTS daone_runtime_store (
-      store_key VARCHAR(64) PRIMARY KEY,
-      store_value TEXT NOT NULL,
-      updated_at TIMESTAMPTZ NOT NULL
-    )
-  `);
+  await ensurePostgresBusinessSchema(getPool());
   await ensureUserIdentity();
   initialized = true;
 }
