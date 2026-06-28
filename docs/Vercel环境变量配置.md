@@ -62,6 +62,52 @@ SMS_ENDPOINT=dysmsapi.ap-southeast-1.aliyuncs.com
 | `DAONE_ADMIN_PHONES` | `<管理员手机号>` | 管理后台允许短信登录的手机号，多个手机号用英文逗号分隔。 |
 | `DAONE_SMS_CODE_TTL_SECONDS` | `300` | 短信验证码有效期，默认 5 分钟。 |
 
+## 微信支付必填
+
+项目部署在 Vercel 后，会优先读取 Vercel Project Settings -> Environment Variables 中配置的环境变量。下面的微信支付变量需要分别配置到 Production 和 Preview/Test 环境。
+
+### Production
+
+| Key | Value | 说明 |
+|---|---|---|
+| `DAONE_PAYMENT_MOCK_ENABLED` | `false` | 关闭支付 mock，启用真实支付通道。 |
+| `WECHAT_PAY_APP_ID` | `<微信支付关联的 AppID>` | 微信支付关联的 AppID。 |
+| `WECHAT_PAY_MERCHANT_ID` | `<微信支付商户号>` | 微信支付商户号。 |
+| `WECHAT_PAY_MERCHANT_SERIAL_NUMBER` | `<API 证书序列号>` | API 证书序列号。 |
+| `WECHAT_PAY_API_V3_KEY` | `<微信支付 APIv3 密钥>` | 微信支付 APIv3 密钥，不要提交到代码仓库。 |
+| `WECHAT_PAY_NOTIFY_URL` | `https://www.daoneai.com/api/v1/payments/WECHAT/notify` | 微信支付服务端回调地址。 |
+| `WECHAT_PAY_PRIVATE_KEY` | `<apiclient_key.pem 文件内容>` | 商户 API 私钥内容，推荐在 Vercel 直接配置该项。 |
+| `WECHAT_PAY_PRIVATE_KEY_PATH` | 留空 | Vercel 上通常不用文件路径方式。 |
+
+### Preview / Test
+
+| Key | Value | 说明 |
+|---|---|---|
+| `DAONE_PAYMENT_MOCK_ENABLED` | `false` | 关闭支付 mock，启用真实支付通道。 |
+| `WECHAT_PAY_APP_ID` | `<微信支付关联的 AppID>` | 微信支付关联的 AppID。 |
+| `WECHAT_PAY_MERCHANT_ID` | `<微信支付商户号>` | 微信支付商户号。 |
+| `WECHAT_PAY_MERCHANT_SERIAL_NUMBER` | `<API 证书序列号>` | API 证书序列号。 |
+| `WECHAT_PAY_API_V3_KEY` | `<微信支付 APIv3 密钥>` | 微信支付 APIv3 密钥，不要提交到代码仓库。 |
+| `WECHAT_PAY_NOTIFY_URL` | `https://dev.daoneai.com/api/v1/payments/WECHAT/notify` | 微信支付服务端回调地址。 |
+| `WECHAT_PAY_PRIVATE_KEY` | `<apiclient_key.pem 文件内容>` | 商户 API 私钥内容，推荐在 Vercel 直接配置该项。 |
+| `WECHAT_PAY_PRIVATE_KEY_PATH` | 留空 | Vercel 上通常不用文件路径方式。 |
+
+`WECHAT_PAY_PRIVATE_KEY` 需要填写微信商户平台下载的 `apiclient_key.pem` 内容，格式通常是：
+
+```text
+-----BEGIN PRIVATE KEY-----
+...
+-----END PRIVATE KEY-----
+```
+
+在 Vercel 环境变量中建议把换行写成 `\n`：
+
+```env
+WECHAT_PAY_PRIVATE_KEY=-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----
+```
+
+不要把 `-----BEGIN CERTIFICATE-----` 开头的证书内容填到 `WECHAT_PAY_PRIVATE_KEY`。证书不是商户 API 私钥，用证书会导致微信支付请求签名失败。
+
 ## 排查方式
 
 部署后访问：
