@@ -272,6 +272,11 @@ function syncSequenceFromStore() {
   syncSequenceFromIds(ids);
 }
 
+export function reseedStore() {
+  seed();
+  syncSequenceFromStore();
+}
+
 function seed() {
   const t = now();
   if (store.plans.size === 0) {

@@ -246,8 +246,8 @@ function missingRequiredConfig() {
 
 function configWarnings() {
   const warnings = [];
-  if (!isLocal() && ["mysql", "postgres"].includes(appConfig.dataSource.type)) {
-    warnings.push("The Node/Vercel runtime uses a database snapshot bridge. Replace it with table-level repositories before high-concurrency production traffic.");
+  if (!isLocal() && appConfig.dataSource.type === "mysql") {
+    warnings.push("The MySQL runtime store still uses a database snapshot bridge. Use PostgreSQL business tables for test and production traffic.");
   }
   return warnings;
 }
