@@ -5,7 +5,7 @@ import { nextId } from "../../infrastructure/common/id.js";
 import { badRequest, forbidden, unauthorized } from "../common/errors.js";
 import { cacheDel, cacheGetJson, cacheSetJson, redisCacheEnabled } from "../../infrastructure/middleware/redisCache.js";
 import { sendSms } from "../../infrastructure/middleware/smsClient.js";
-import { findOrCreatePostgresUser, findPostgresUserByPhone } from "../../infrastructure/middleware/postgresRuntimeStore.js";
+import { findOrCreatePostgresUser, findPostgresUserById, findPostgresUserByPhone } from "../../infrastructure/middleware/postgresRuntimeStore.js";
 import { createLogger } from "../../infrastructure/common/logger.js";
 
 const smsLog = createLogger("auth_sms");
@@ -129,10 +129,11 @@ export async function resolveUser(token) {
   if (!session || session.expiresAt < Date.now()) {
     throw unauthorized();
   }
-  const user = store.users.get(session.userId);
+  const user = store.users.get(session.userId) || await findPostgresUserById(session.userId);
   if (!user || user.status !== "ENABLED") {
     throw unauthorized();
   }
+  store.users.set(user.id, user);
   return user;
 }
 

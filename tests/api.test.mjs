@@ -153,6 +153,23 @@ describe("Daone Vercel Node API", () => {
     assert.equal(response.body.data.dataSourceType, "memory");
     assert.equal(response.body.data.mocks.storage, true);
 
+    const originalAllowedOrigins = appConfig.cors.allowedOrigins;
+    try {
+      appConfig.cors.allowedOrigins = ["https://www.daoneai.com", "https://admin.daoneai.com"];
+      response = await request("GET", "/api/health", null, null, {
+        origin: "https://admin.daoneai.com"
+      });
+      assert.equal(response.headers["access-control-allow-origin"], "https://admin.daoneai.com");
+      assert.equal(response.headers.vary, "Origin");
+
+      response = await request("GET", "/api/health", null, null, {
+        origin: "https://evil.example"
+      });
+      assert.equal(response.headers["access-control-allow-origin"], undefined);
+    } finally {
+      appConfig.cors.allowedOrigins = originalAllowedOrigins;
+    }
+
     response = await request("POST", "/api/admin/v1/sms-codes", {
       phone: "13800138000",
       scene: "LOGIN"

@@ -72,8 +72,8 @@ npm run build:prod   # 强制 prod profile
 部署后接口前缀：
 
 ```text
-https://api.daoneai.com/api/v1          # 生产
-https://api-test.daoneai.com/api/v1     # 测试
+https://www.daoneai.com/api/v1          # 生产
+https://dev.daoneai.com/api/v1          # 测试 / 预览
 ```
 
 ## Environment Profiles
@@ -81,9 +81,8 @@ https://api-test.daoneai.com/api/v1     # 测试
 Node.js 版本使用轻量 `.env` 文件区分环境，作用类似 Java 的 `application-local.yml`、`application-test.yml`、`application-prod.yml`。
 
 - `config/application.local.env`: 本地环境。默认使用内存数据和 Mock Redis、OSS、短信、模型、内容安全、支付。
-- `config/application.test.env.example`: 测试环境模板。用于 Vercel Preview/Test，默认使用 Postgres/Neon，填写真实 Redis、OSS、支付等配置。
-- `config/application.prod.env.example`: 生产环境模板。用于 Vercel Production，默认使用 Postgres/Neon，填写真实 Redis、OSS、支付等配置。
-- `.env.vercel.example`: Vercel 控制台环境变量总模板。
+- `config/application.test.env`: 测试环境非敏感模板。用于 Vercel Preview/Test，真实数据库、Redis、OSS、支付密钥必须放在 Vercel 环境变量或本地私有 env 文件；不要把真实密钥提交进仓库。
+- `config/application.prod.env`: 生产环境非敏感模板。用于 Vercel Production，真实数据库、Redis、OSS、支付密钥必须放在 Vercel 环境变量。
 
 环境识别规则：
 

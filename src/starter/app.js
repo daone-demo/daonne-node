@@ -346,10 +346,13 @@ function hasRole(currentRole, role) {
 }
 
 function cors(req, res) {
-  const origin = req.headers.origin || "*";
+  const origin = req.headers.origin || "";
   const allowed = appConfig.cors.allowedOrigins;
-  const allowOrigin = allowed.includes("*") || allowed.includes(origin) ? origin : allowed[0];
-  res.setHeader("access-control-allow-origin", allowOrigin || "*");
+  const allowOrigin = allowed.includes("*") ? "*" : allowed.includes(origin) ? origin : "";
+  if (allowOrigin) {
+    res.setHeader("access-control-allow-origin", allowOrigin);
+  }
+  res.setHeader("vary", "Origin");
   res.setHeader("access-control-allow-methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
   res.setHeader("access-control-allow-headers", "Content-Type,Authorization,Accept,Idempotency-Key,X-Daone-Payment-Signature");
   res.setHeader("access-control-expose-headers", "X-Trace-Id");
