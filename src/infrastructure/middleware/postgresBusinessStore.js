@@ -434,8 +434,8 @@ export async function hydratePostgresBusinessStore(pool) {
   await hydrateBilling(pool);
   await hydrateAdminContent(pool);
   const shouldPersistSeeds = SEED_BACKED_KEYS.some((key) => store[key].size === 0);
-  reseedStore();
-  return shouldPersistSeeds;
+  const seedsChanged = reseedStore();
+  return shouldPersistSeeds || seedsChanged;
 }
 
 function resetBusinessStore() {
