@@ -6,6 +6,10 @@ import { badGateway } from "../../service/common/errors.js";
 const smsProviderLog = createLogger("sms_provider");
 
 export async function sendSms(phone, code, scene = "LOGIN") {
+  const accessKeyId = appConfig.aliyun.accessKeyId.trim();
+  const accessKeySecret = appConfig.aliyun.accessKeySecret.trim();
+  const signName = appConfig.sms.signName.trim();
+  const templateCode = appConfig.sms.templateCode.trim();
   if (appConfig.sms.mockEnabled) {
     logSmsProvider("sms_provider_mock_send", {
       phone: maskPhone(phone),
@@ -17,25 +21,25 @@ export async function sendSms(phone, code, scene = "LOGIN") {
     phone: maskPhone(phone),
     scene,
     regionId: appConfig.contentSafety.regionId || "cn-shanghai",
-    hasAccessKeyId: Boolean(appConfig.aliyun.accessKeyId),
-    hasAccessKeySecret: Boolean(appConfig.aliyun.accessKeySecret),
-    hasSignName: Boolean(appConfig.sms.signName),
-    hasTemplateCode: Boolean(appConfig.sms.templateCode),
-    signNameLength: appConfig.sms.signName.length,
-    templateCode: appConfig.sms.templateCode || null
+    hasAccessKeyId: Boolean(accessKeyId),
+    hasAccessKeySecret: Boolean(accessKeySecret),
+    hasSignName: Boolean(signName),
+    hasTemplateCode: Boolean(templateCode),
+    signNameLength: signName.length,
+    templateCode: templateCode || null
   });
-  assertSmsProviderConfigured();
+  assertSmsProviderConfigured({ accessKeyId, accessKeySecret, signName, templateCode });
   const params = {
-    AccessKeyId: appConfig.aliyun.accessKeyId,
+    AccessKeyId: accessKeyId,
     Action: "SendSms",
     Format: "JSON",
     PhoneNumbers: phone,
     RegionId: appConfig.contentSafety.regionId || "cn-shanghai",
-    SignName: appConfig.sms.signName,
+    SignName: signName,
     SignatureMethod: "HMAC-SHA1",
     SignatureNonce: crypto.randomUUID(),
     SignatureVersion: "1.0",
-    TemplateCode: appConfig.sms.templateCode,
+    TemplateCode: templateCode,
     TemplateParam: JSON.stringify({ code, scene }),
     Timestamp: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
     Version: "2017-05-25"
@@ -43,7 +47,7 @@ export async function sendSms(phone, code, scene = "LOGIN") {
   const canonical = canonicalQuery(params);
   const stringToSign = `GET&%2F&${percentEncode(canonical)}`;
   const signature = crypto
-    .createHmac("sha1", `${appConfig.aliyun.accessKeySecret}&`)
+    .createHmac("sha1", `${accessKeySecret}&`)
     .update(stringToSign)
     .digest("base64");
   const url = `https://dysmsapi.aliyuncs.com/?${canonical}&Signature=${percentEncode(signature)}`;
@@ -83,12 +87,12 @@ export async function sendSms(phone, code, scene = "LOGIN") {
   return result;
 }
 
-function assertSmsProviderConfigured() {
+function assertSmsProviderConfigured({ accessKeyId, accessKeySecret, signName, templateCode }) {
   const missing = [];
-  if (!appConfig.aliyun.accessKeyId) missing.push("ALIYUN_ACCESS_KEY_ID");
-  if (!appConfig.aliyun.accessKeySecret) missing.push("ALIYUN_ACCESS_KEY_SECRET");
-  if (!appConfig.sms.signName) missing.push("SMS_SIGN_NAME");
-  if (!appConfig.sms.templateCode) missing.push("SMS_TEMPLATE_CODE");
+  if (!accessKeyId) missing.push("ALIYUN_ACCESS_KEY_ID");
+  if (!accessKeySecret) missing.push("ALIYUN_ACCESS_KEY_SECRET");
+  if (!signName) missing.push("SMS_SIGN_NAME");
+  if (!templateCode) missing.push("SMS_TEMPLATE_CODE");
   if (missing.length) {
     throw badGateway("SMS_PROVIDER_NOT_CONFIGURED", "短信服务未配置完整", { missing });
   }
@@ -96,14 +100,17 @@ function assertSmsProviderConfigured() {
 
 function canonicalQuery(params) {
   return Object.entries(params)
-    .sort(([a], [b]) => a.localeCompare(b))
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
     .map(([key, value]) => `${percentEncode(key)}=${percentEncode(value)}`)
     .join("&");
 }
 
 function percentEncode(value) {
   return encodeURIComponent(String(value))
-    .replace(/\+/g, "%20")
+    .replace(/!/g, "%21")
+    .replace(/'/g, "%27")
+    .replace(/\(/g, "%28")
+    .replace(/\)/g, "%29")
     .replace(/\*/g, "%2A")
     .replace(/%7E/g, "~");
 }
