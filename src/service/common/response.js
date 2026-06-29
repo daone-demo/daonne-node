@@ -12,6 +12,14 @@ export function success(data = null) {
   };
 }
 
+export function successMessage(data = null, message = "success") {
+  return {
+    code: "OK",
+    message,
+    data
+  };
+}
+
 export function pageResponse(records, page, pageSize, total) {
   return {
     records,

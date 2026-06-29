@@ -1,7 +1,7 @@
 import { Router } from "../service/common/router.js";
 import { appConfig, configHealth } from "../infrastructure/config/env.js";
 import { readBody, parsePage, paginate } from "../service/common/http.js";
-import { pageResponse, sendError, sendJson, sendNoContent, success, traceId } from "../service/common/response.js";
+import { pageResponse, sendError, sendJson, sendNoContent, success, successMessage, traceId } from "../service/common/response.js";
 import { forbidden, notFound, unauthorized } from "../service/common/errors.js";
 import * as auth from "../service/auth/authService.js";
 import * as userService from "../service/user/userService.js";
@@ -167,8 +167,8 @@ router.put("/api/admin/v1/plans/:planCode", async ({ user, params, body }) => ad
 router.patch("/api/admin/v1/plans/:planCode/status", async ({ user, params, body }) => adminService.updatePlanStatus(user, params.planCode, body.status), { admin: true });
 router.delete("/api/admin/v1/plans/:planCode", async ({ user, params }) => {
   adminService.deletePlan(user, params.planCode);
-  return noContent();
-}, { admin: true });
+  return deleteSuccess();
+}, { admin: true, rawSuccess: true });
 router.get("/api/admin/v1/model-configs", async () => ({ items: adminService.modelConfigs() }), { admin: true });
 router.get("/api/admin/v1/model-configs/:modelCode", async ({ params }) => adminService.modelDetail(params.modelCode), { admin: true });
 router.put("/api/admin/v1/model-configs/:modelCode", async ({ user, params, body }) => adminService.saveModelConfig(user, params.modelCode, body), { admin: true });
@@ -180,8 +180,8 @@ router.put("/api/admin/v1/prompt-templates/:code", async ({ user, params, body }
 router.patch("/api/admin/v1/prompt-templates/:code/status", async ({ user, params, body }) => adminService.updatePromptTemplateStatus(user, params.code, body.status), { admin: true });
 router.delete("/api/admin/v1/prompt-templates/:code", async ({ user, params }) => {
   adminService.deletePromptTemplate(user, params.code);
-  return noContent();
-}, { admin: true });
+  return deleteSuccess();
+}, { admin: true, rawSuccess: true });
 router.get("/api/admin/v1/inspirations", async ({ url }) => ({ items: adminService.inspirations(Object.fromEntries(url.searchParams)) }), { admin: true });
 router.get("/api/admin/v1/inspirations/:id", async ({ params }) => adminService.inspirationDetail(params.id), { admin: true });
 router.post("/api/admin/v1/inspirations", async ({ user, body }) => adminService.saveInspiration(user, body), { admin: true });
@@ -189,8 +189,8 @@ router.put("/api/admin/v1/inspirations/:id", async ({ user, params, body }) => a
 router.patch("/api/admin/v1/inspirations/:id/status", async ({ user, params, body }) => adminService.updateInspirationStatus(user, params.id, body.status), { admin: true });
 router.delete("/api/admin/v1/inspirations/:id", async ({ user, params }) => {
   adminService.deleteInspiration(user, params.id);
-  return noContent();
-}, { admin: true });
+  return deleteSuccess();
+}, { admin: true, rawSuccess: true });
 router.get("/api/admin/v1/categories", async ({ url }) => page(adminService.categories(Object.fromEntries(url.searchParams)), url), { admin: true });
 router.get("/api/admin/v1/categories/:code", async ({ params }) => adminService.categoryDetail(params.code), { admin: true });
 router.post("/api/admin/v1/categories", async ({ user, body }) => adminService.saveCategory(user, body), { admin: true });
@@ -198,8 +198,8 @@ router.put("/api/admin/v1/categories/:code", async ({ user, params, body }) => a
 router.patch("/api/admin/v1/categories/:code/status", async ({ user, params, body }) => adminService.updateCategoryStatus(user, params.code, body.status), { admin: true });
 router.delete("/api/admin/v1/categories/:code", async ({ user, params }) => {
   adminService.deleteCategory(user, params.code);
-  return noContent();
-}, { admin: true });
+  return deleteSuccess();
+}, { admin: true, rawSuccess: true });
 router.get("/api/admin/v1/workflows", async ({ url }) => page(adminService.adminWorkflows(Object.fromEntries(url.searchParams)), url), { admin: true });
 router.get("/api/admin/v1/workflows/:workflowId", async ({ params }) => adminService.workflowDetail(params.workflowId), { admin: true });
 router.post("/api/admin/v1/workflows", async ({ user, body }) => adminService.saveWorkflow(user, body), { admin: true });
@@ -207,8 +207,8 @@ router.put("/api/admin/v1/workflows/:workflowId", async ({ user, params, body })
 router.patch("/api/admin/v1/workflows/:workflowId/status", async ({ user, params, body }) => adminService.updateWorkflowStatus(user, params.workflowId, body.status), { admin: true });
 router.delete("/api/admin/v1/workflows/:workflowId", async ({ user, params }) => {
   adminService.deleteWorkflow(user, params.workflowId);
-  return noContent();
-}, { admin: true });
+  return deleteSuccess();
+}, { admin: true, rawSuccess: true });
 router.get("/api/admin/v1/invoices", async ({ url }) => page(adminService.invoices(Object.fromEntries(url.searchParams)), url), { admin: true });
 router.get("/api/admin/v1/invoices/:invoiceId", async ({ params }) => adminService.invoiceDetail(params.invoiceId), { admin: true });
 router.post("/api/admin/v1/invoices", async ({ user, body }) => adminService.saveInvoice(user, body), { admin: true });
@@ -216,8 +216,8 @@ router.put("/api/admin/v1/invoices/:invoiceId", async ({ user, params, body }) =
 router.patch("/api/admin/v1/invoices/:invoiceId/status", async ({ user, params, body }) => adminService.updateInvoiceStatus(user, params.invoiceId, body.status, body), { admin: true });
 router.delete("/api/admin/v1/invoices/:invoiceId", async ({ user, params }) => {
   adminService.deleteInvoice(user, params.invoiceId);
-  return noContent();
-}, { admin: true });
+  return deleteSuccess();
+}, { admin: true, rawSuccess: true });
 
 router.get("/api/v3/swagger", async () => openApiSpec(), { public: true, rawSuccess: true });
 router.get("/api/doc.html", async () => html(docsHtml()), { public: true });
@@ -361,6 +361,10 @@ function html(value) {
 
 function noContent() {
   return { __noContent: true };
+}
+
+function deleteSuccess() {
+  return successMessage({}, "删除成功");
 }
 
 function providerStream(response) {
